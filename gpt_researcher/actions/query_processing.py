@@ -1,4 +1,5 @@
 import json_repair
+from typing import Any, List, Dict
 
 from gpt_researcher.llm_provider.generic.base import ReasoningEfforts
 
@@ -34,7 +35,6 @@ def _normalize_sub_queries(parsed: Any, fallback_query: str) -> List[str]:
     return queries
 from ..utils.llm import create_chat_completion
 from ..prompts import PromptFamily
-from typing import Any, List, Dict
 from ..config import Config
 import logging
 
