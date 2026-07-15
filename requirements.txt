@@ -67,4 +67,5 @@ python-multipart>=0.0.6
 json-repair>=0.29.8
 json5>=0.9.25
 markdown>=3.5.1
-
+playwright>=1.61.0
+chromium>=0.0.0

@@ -88,7 +88,7 @@ const GPTResearcher = (() => {
       if (!cookieEnabled) {
         console.warn("Cookies are disabled in this browser");
         cookiesEnabled = false;
-        showToast("Cookies are disabled. History will use localStorage instead.", 5000);
+        showToast("Cookie 已禁用，历史记录将使用 localStorage 存储。", 5000);
       } else {
         // Clean up test cookie
         document.cookie = "testcookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
@@ -297,7 +297,7 @@ const GPTResearcher = (() => {
 
     // Update research status
     if (researchStatusEl) {
-      researchStatusEl.textContent = isResearchActive ? 'Active' : 'Inactive';
+      researchStatusEl.textContent = isResearchActive ? '研究中' : '空闲';
     }
 
     // Update connection duration
@@ -346,7 +346,7 @@ const GPTResearcher = (() => {
   const getSocketStatus = () => {
     if (!socket) {
       return {
-        statusText: 'Disconnected',
+        statusText: '未连接',
         indicatorClass: 'disconnected'
       };
     }
@@ -354,23 +354,23 @@ const GPTResearcher = (() => {
     switch (socket.readyState) {
       case WebSocket.CONNECTING:
         return {
-          statusText: 'Connecting',
+          statusText: '连接中',
           indicatorClass: 'connecting'
         };
       case WebSocket.OPEN:
         return {
-          statusText: 'Connected',
+          statusText: '已连接',
           indicatorClass: 'connected'
         };
       case WebSocket.CLOSING:
         return {
-          statusText: 'Closing',
+          statusText: '关闭中',
           indicatorClass: 'connecting'
         };
       case WebSocket.CLOSED:
       default:
         return {
-          statusText: 'Disconnected',
+          statusText: '未连接',
           indicatorClass: 'disconnected'
         };
     }
@@ -380,15 +380,15 @@ const GPTResearcher = (() => {
   const getReadyStateText = (readyState) => {
     switch (readyState) {
       case WebSocket.CONNECTING:
-        return '0 (Connecting)';
+        return '0 (连接中)';
       case WebSocket.OPEN:
-        return '1 (Open)';
+        return '1 (已打开)';
       case WebSocket.CLOSING:
-        return '2 (Closing)';
+        return '2 (关闭中)';
       case WebSocket.CLOSED:
-        return '3 (Closed)';
+        return '3 (已关闭)';
       default:
-        return `${readyState} (Unknown)`;
+        return `${readyState} (未知)`;
     }
   }
 
@@ -470,21 +470,21 @@ const GPTResearcher = (() => {
       setCookie('conversationHistory', jsonString, 30);
 
       if (storageHistory.length > 0 && !isInitialLoad) {
-        showToast('Research history saved!');
+        showToast('研究历史已保存！');
       }
     } catch (error) {
       console.error('Error saving research history:', error);
-      showToast('Error saving history. Some entries may not be saved.');
+      showToast('保存历史失败，部分条目可能未保存。');
     }
   }
 
   // Delete a history entry
   const deleteHistoryEntry = (index) => {
-    if (confirm('Are you sure you want to delete this research entry?')) {
+    if (confirm('确定要删除这条研究记录吗？')) {
       conversationHistory.splice(index, 1);
       saveConversationHistory();
       renderHistoryEntries();
-      showToast('Entry deleted successfully');
+      showToast('条目已删除');
     }
   }
 
@@ -494,7 +494,7 @@ const GPTResearcher = (() => {
       conversationHistory = [];
       saveConversationHistory();
       renderHistoryEntries();
-      showToast('Research history cleared successfully');
+      showToast('研究历史已清空');
     }
   }
 
@@ -578,17 +578,17 @@ const GPTResearcher = (() => {
       // Build the HTML for the entry with enhanced formatting
       entryElement.innerHTML = `
         <div class="history-entry-header">
-          <h4 class="history-entry-title">${entry.prompt || 'Unnamed Research'}</h4>
+          <h4 class="history-entry-title">${entry.prompt || '未命名研究'}</h4>
           ${timestampHTML}
         </div>
         <div class="history-entry-format">
-          ${links.pdf ? `<a href="${links.pdf}" class="history-entry-action" target="_blank" title="Open PDF Report"><i class="fas fa-file-pdf"></i> PDF</a>` : ''}
-          ${links.docx ? `<a href="${links.docx}" class="history-entry-action" target="_blank" title="Open Word Document"><i class="fas fa-file-word"></i> Word</a>` : ''}
-          ${links.md ? `<a href="${links.md}" class="history-entry-action" target="_blank" title="Open Markdown File"><i class="fas fa-file-lines"></i> MD</a>` : ''}
-          ${links.json ? `<a href="${links.json}" class="history-entry-action" target="_blank" title="Open JSON Data"><i class="fas fa-file-code"></i> JSON</a>` : ''}
+          ${links.pdf ? `<a href="${links.pdf}" class="history-entry-action" target="_blank" title="打开 PDF 报告"><i class="fas fa-file-pdf"></i> PDF</a>` : ''}
+          ${links.docx ? `<a href="${links.docx}" class="history-entry-action" target="_blank" title="打开 Word 文档"><i class="fas fa-file-word"></i> Word</a>` : ''}
+          ${links.md ? `<a href="${links.md}" class="history-entry-action" target="_blank" title="打开 Markdown 文件"><i class="fas fa-file-lines"></i> MD</a>` : ''}
+          ${links.json ? `<a href="${links.json}" class="history-entry-action" target="_blank" title="打开 JSON 数据"><i class="fas fa-file-code"></i> JSON</a>` : ''}
         </div>
         <div class="history-entry-actions">
-          <button class="history-entry-action delete-entry" title="Delete this research entry"><i class="fas fa-trash-alt"></i></button>
+          <button class="history-entry-action delete-entry" title="删除此研究记录"><i class="fas fa-trash-alt"></i></button>
         </div>
       `;
 
@@ -679,7 +679,7 @@ const GPTResearcher = (() => {
     }
 
     // Inform user
-    showToast('Research parameters loaded. You can start the research again.');
+    showToast('研究参数已加载，您可以重新开始研究。');
   }
 
   // Copy entry content to clipboard
@@ -695,7 +695,7 @@ const GPTResearcher = (() => {
     document.body.removeChild(textarea);
 
     // Show a toast notification
-    showToast('Research content copied to clipboard!');
+    showToast('研究内容已复制到剪贴板！');
   }
 
   // Show a toast notification
@@ -723,7 +723,7 @@ const GPTResearcher = (() => {
   const saveToHistory = (report, downloadLinks) => {
     if (!downloadLinks) {
       console.error('No download links provided');
-      showToast('Error: Could not save research to history');
+      showToast('错误：无法保存研究记录');
       return;
     }
 
@@ -758,9 +758,9 @@ const GPTResearcher = (() => {
 
     // Prompt user about storage method
     if (cookiesEnabled) {
-      showToast('Research saved! Your history is stored in a browser cookie.');
+      showToast('研究已保存！历史记录存储在浏览器 Cookie 中。');
     } else {
-      showToast('Research saved! Your history is stored using localStorage.');
+      showToast('研究已保存！历史记录使用 localStorage 存储。');
     }
   }
 
@@ -1188,7 +1188,7 @@ const GPTResearcher = (() => {
     }
 
     // Show toast notification
-    showToast('Copied to clipboard!');
+        showToast('已复制到剪贴板！');
 
     // Reset the button after 3 seconds
     setTimeout(resetIcons, 3000);
@@ -1257,7 +1257,7 @@ const GPTResearcher = (() => {
         }
         break
       case 'error':
-        status = 'Research failed!'
+        status = '研究失败！'
         setReportActionsStatus('disabled')
         isResearchActive = false;
         // Stop the research icon spinning
@@ -1460,7 +1460,7 @@ const GPTResearcher = (() => {
     // If cookie is too large, display warning and truncate history
     if (cookieSize > MAX_COOKIE_SIZE) {
       console.warn(`Cookie size (${cookieSize} bytes) exceeds the ${MAX_COOKIE_SIZE} bytes limit!`);
-      showToast('Warning: History too large for cookie storage! Oldest entries will be removed.');
+      showToast('警告：历史记录过大，无法完全保存到 Cookie，最旧的条目将被移除。');
 
       if (name === 'conversationHistory') {
         try {
@@ -1551,15 +1551,15 @@ const GPTResearcher = (() => {
           const parsed = JSON.parse(storageData);
           const entryCount = Array.isArray(parsed) ? parsed.length : 0;
 
-          showToast(`Using localStorage: ${kilobyteSize}KB, ${entryCount} entries`);
+          showToast(`localStorage 使用情况：${kilobyteSize}KB, ${entryCount} 条记录`);
           console.debug(`LocalStorage size: ${byteSize} bytes, ${kilobyteSize}KB`);
           console.debug(`LocalStorage entries: ${entryCount}`);
         } catch (e) {
-          showToast(`LocalStorage contains invalid data: ${kilobyteSize}KB`);
+          showToast(`localStorage 包含无效数据：${kilobyteSize}KB`);
           console.error('LocalStorage parse error:', e);
         }
       } else {
-        showToast('No research history found in localStorage');
+        showToast('localStorage 中没有找到研究历史');
       }
       return;
     }
@@ -1576,15 +1576,15 @@ const GPTResearcher = (() => {
         const parsed = JSON.parse(conversationCookie);
         const entryCount = Array.isArray(parsed) ? parsed.length : 0;
 
-        showToast(`Cookie found: ${kilobyteSize}KB, ${entryCount} research entries`);
+        showToast(`Cookie 数据：${kilobyteSize}KB, ${entryCount} 条研究记录`);
         console.debug(`Cookie size: ${byteSize} bytes, ${kilobyteSize}KB`);
         console.debug(`Cookie entries: ${entryCount}`);
       } catch (e) {
-        showToast(`Cookie found but invalid: ${kilobyteSize}KB`);
+        showToast(`Cookie 数据无效：${kilobyteSize}KB`);
         console.error('Cookie parse error:', e);
       }
     } else {
-      showToast('No research history cookie found');
+      showToast('未找到研究历史 Cookie');
     }
   }
 
@@ -1592,7 +1592,7 @@ const GPTResearcher = (() => {
   const exportHistory = () => {
     try {
       if (!conversationHistory || conversationHistory.length === 0) {
-        showToast('No research history to export');
+        showToast('没有可导出的研究历史');
         return;
       }
 
@@ -1623,11 +1623,11 @@ const GPTResearcher = (() => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      showToast('Research history exported to JSON file');
+      showToast('研究历史已导出为 JSON 文件');
       console.debug('History exported, entries:', conversationHistory.length);
     } catch (error) {
       console.error('Error exporting history:', error);
-      showToast('Error exporting research history');
+      showToast('导出研究历史失败');
     }
   }
 
@@ -1637,7 +1637,7 @@ const GPTResearcher = (() => {
     if (fileInput) {
       fileInput.click();
     } else {
-      showToast('Import functionality not available');
+      showToast('导入功能不可用');
     }
   }
 
@@ -1669,7 +1669,7 @@ const GPTResearcher = (() => {
         });
 
         if (validEntries.length === 0) {
-          showToast('No valid research entries found in the imported file');
+          showToast('导入的文件中没有找到有效的研究记录');
           return;
         }
 
@@ -1702,12 +1702,12 @@ const GPTResearcher = (() => {
         saveConversationHistory();
         renderHistoryEntries();
 
-        showToast(`Successfully imported ${validEntries.length} research entries`);
+        showToast(`成功导入了 ${validEntries.length} 条研究记录`);
         console.debug('Research history imported, valid entries:', validEntries.length);
 
       } catch (error) {
         console.error('Error importing history:', error);
-        showToast('Error importing research history: Invalid file format');
+        showToast('导入研究历史失败：文件格式无效');
       }
 
       // Reset the file input so the same file can be selected again
@@ -1716,7 +1716,7 @@ const GPTResearcher = (() => {
 
     reader.onerror = () => {
       console.error('Error reading file');
-      showToast('Error reading the imported file');
+      showToast('读取导入文件失败');
       event.target.value = '';
     };
 
@@ -1790,10 +1790,10 @@ const GPTResearcher = (() => {
       finalTranscript = '';
       button.classList.add('listening');
       button.innerHTML = '<i class="fas fa-microphone-slash"></i>';
-      button.title = 'Stop listening';
+      button.title = '停止听取';
 
       // Show visual feedback
-      showToast('Listening...', 1000);
+      showToast('正在听取...', 1000);
     };
 
     recognition.onresult = (event) => {
@@ -1823,9 +1823,9 @@ const GPTResearcher = (() => {
       resetRecognition();
 
       if (event.error === 'not-allowed') {
-        showToast('Microphone access denied. Please allow microphone access in your browser settings.', 3000);
+        showToast('麦克风权限被拒绝，请在浏览器设置中允许麦克风访问。', 3000);
       } else {
-        showToast('Speech recognition error: ' + event.error, 3000);
+        showToast('语音识别错误：' + event.error, 3000);
       }
     };
 
@@ -1856,7 +1856,7 @@ const GPTResearcher = (() => {
     // Don't attempt too many reconnections
     if (reconnectAttempts >= maxReconnectAttempts) {
       console.error(`Failed to reconnect after ${maxReconnectAttempts} attempts`);
-      addChatMessage(`Unable to reconnect after ${maxReconnectAttempts} attempts. Please refresh the page.`, false);
+      addChatMessage(`${maxReconnectAttempts} 次重连失败，请刷新页面。`, false);
       return false;
     }
 
@@ -1867,7 +1867,7 @@ const GPTResearcher = (() => {
     console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts}) in ${backoff}ms...`);
 
     // Show reconnection status to user
-    addChatMessage(`Connection lost. Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})...`, false);
+    addChatMessage(`连接已断开，正在尝试重连 (${reconnectAttempts}/${maxReconnectAttempts})...`, false);
 
     // Try to reconnect after delay
     setTimeout(() => {
@@ -1939,7 +1939,7 @@ const GPTResearcher = (() => {
       // Attempt to reconnect and queue the message to be sent after reconnection
       if (!reconnectWebSocket(messageToSend)) {
         // If reconnection fails or max attempts reached
-        addChatMessage('Unable to send message. Connection is unavailable.', false);
+        addChatMessage('无法发送消息，连接不可用。', false);
       }
     }
   }
@@ -2248,9 +2248,9 @@ const GPTResearcher = (() => {
       const parsed = JSON.parse(mcpConfig.value.trim() || '[]');
       mcpConfig.value = JSON.stringify(parsed, null, 2);
       validateMCPConfig();
-      showToast('JSON formatted successfully!');
+      showToast('JSON 格式化成功！');
     } catch (error) {
-      showToast('Cannot format invalid JSON');
+      showToast('无法格式化无效的 JSON');
     }
   };
 
@@ -2277,16 +2277,16 @@ const GPTResearcher = (() => {
     if (mcpConfig) {
       mcpConfig.value = JSON.stringify(exampleConfig, null, 2);
       validateMCPConfig();
-      showToast('Example configuration loaded!');
+      showToast('示例配置已加载！');
     }
   };
 
   // Update retriever configuration for MCP
   const updateRetrieverForMCP = (enableMCP) => {
     if (enableMCP) {
-      showToast('MCP enabled - will be included in research process');
+      showToast('MCP 已启用 - 将参与研究过程');
     } else {
-      showToast('MCP disabled - using web search only');
+      showToast('MCP 已禁用 - 仅使用网页搜索');
     }
   };
 
@@ -2311,32 +2311,32 @@ const GPTResearcher = (() => {
         <button class="mcp-info-close" onclick="closeMCPInfo()">
           <i class="fas fa-times"></i>
         </button>
-        <h3>Model Context Protocol (MCP)</h3>
-        <p>MCP enables GPT Researcher to connect with external tools and data sources through a standardized protocol.</p>
+        <h3>模型上下文协议 (MCP)</h3>
+        <p>MCP 使 GPT Researcher 能够通过标准化协议连接外部工具和数据源。</p>
         
-        <h4 class="highlight">Benefits:</h4>
+        <h4 class="highlight">优势：</h4>
         <ul>
-          <li><span class="highlight">Access Local Data:</span> Connect to databases, file systems, and APIs</li>
-          <li><span class="highlight">Use External Tools:</span> Integrate with web services and third-party tools</li>
-          <li><span class="highlight">Extend Capabilities:</span> Add custom functionality through MCP servers</li>
-          <li><span class="highlight">Maintain Security:</span> Controlled access with proper authentication</li>
+          <li><span class="highlight">访问本地数据：</span>连接数据库、文件系统和 API</li>
+          <li><span class="highlight">使用外部工具：</span>集成网络服务和第三方工具</li>
+          <li><span class="highlight">扩展能力：</span>通过 MCP 服务器添加自定义功能</li>
+          <li><span class="highlight">安全保障：</span>通过适当认证实现受控访问</li>
         </ul>
 
-        <h4 class="highlight">Quick Start:</h4>
+        <h4 class="highlight">快速开始：</h4>
         <ul>
-          <li>Enable MCP using the checkbox above</li>
-          <li>Click a preset to add pre-configured servers to the JSON</li>
-          <li>Or paste your own MCP configuration as a JSON array</li>
-          <li>Start your research - MCP will run with optimal settings</li>
+          <li>使用上方复选框启用 MCP</li>
+          <li>点击预设可将预配置服务器添加到 JSON 中</li>
+          <li>或粘贴您自己的 MCP 配置（JSON 数组格式）</li>
+          <li>开始研究 - MCP 将以最优设置运行</li>
         </ul>
 
-        <h4 class="highlight">Configuration Format:</h4>
-        <p>Each MCP server should be a JSON object with these properties:</p>
+        <h4 class="highlight">配置格式：</h4>
+        <p>每个 MCP 服务器应为一个包含以下属性的 JSON 对象：</p>
         <ul>
-          <li><span class="highlight">name:</span> Unique identifier (e.g., "github", "filesystem")</li>
-          <li><span class="highlight">command:</span> Command to run the server (e.g., "npx", "python")</li>
-          <li><span class="highlight">args:</span> Array of arguments (e.g., ["-y", "@modelcontextprotocol/server-github"])</li>
-          <li><span class="highlight">env:</span> Object with environment variables (e.g., {"API_KEY": "your_key"})</li>
+          <li><span class="highlight">name：</span>唯一标识符（如 "github"、"filesystem"）</li>
+          <li><span class="highlight">command：</span>运行服务器的命令（如 "npx"、"python"）</li>
+          <li><span class="highlight">args：</span>参数数组（如 ["-y", "@modelcontextprotocol/server-github"]）</li>
+          <li><span class="highlight">env：</span>环境变量对象（如 {"API_KEY": "your_key"}）</li>
         </ul>
       </div>
     `;
@@ -2413,11 +2413,11 @@ const GPTResearcher = (() => {
       if (existingIndex !== -1) {
         // Replace existing server
         currentConfig[existingIndex] = config;
-        showToast(`Updated ${preset} MCP server configuration`);
+        showToast(`已更新 ${preset} MCP 服务器配置`);
       } else {
         // Add new server
         currentConfig.push(config);
-        showToast(`Added ${preset} MCP server configuration`);
+        showToast(`已添加 ${preset} MCP 服务器配置`);
       }
 
       mcpConfig.value = JSON.stringify(currentConfig, null, 2);
@@ -2425,7 +2425,7 @@ const GPTResearcher = (() => {
 
     } catch (error) {
       console.error('Error adding preset:', error);
-      showToast('Error adding preset configuration');
+      showToast('添加预设配置失败');
     }
   };
 
@@ -2445,7 +2445,7 @@ const GPTResearcher = (() => {
 
     // Validate configuration before collecting
     if (!validateMCPConfig()) {
-      showToast('Invalid MCP configuration - please fix errors before submitting');
+      showToast('MCP 配置无效 - 请在提交前修复错误');
       return null;
     }
 
@@ -2460,7 +2460,7 @@ const GPTResearcher = (() => {
       };
     } catch (error) {
       console.error('Error collecting MCP data:', error);
-      showToast('Error processing MCP configuration');
+      showToast('处理 MCP 配置时出错');
       return null;
     }
   };

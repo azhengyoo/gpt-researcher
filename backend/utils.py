@@ -103,11 +103,71 @@ async def write_md_to_pdf(text: str, filename: str = "") -> str:
             )
         print(f"Report written to {file_path}")
     except Exception as e:
-        print(f"Error in converting Markdown to PDF: {e}")
-        return ""
+        print(f"WeasyPrint failed (GTK may not be installed): {e}")
+        print("Falling back to Playwright for PDF generation...")
+        try:
+            _write_md_to_pdf_playwright(text, css_path, file_path)
+        except Exception as e2:
+            print(f"Playwright PDF fallback also failed: {e2}")
+            return ""
 
     encoded_file_path = urllib.parse.quote(file_path)
     return encoded_file_path
+
+
+def _write_md_to_pdf_playwright(text: str, css_path: str, file_path: str) -> None:
+    """Fallback PDF generation using Playwright (cross-platform, no GTK needed).
+
+    Converts markdown → HTML, then uses headless Chromium to render to PDF.
+    """
+    import tempfile
+
+    # Convert markdown to HTML
+    html_body = mistune.html(text)
+
+    # Read CSS content
+    css_content = ""
+    if os.path.exists(css_path):
+        with open(css_path, "r", encoding="utf-8") as f:
+            css_content = f.read()
+
+    # Build a complete HTML page
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+{css_content}
+body {{ font-family: "Microsoft YaHei", "SimSun", Arial, sans-serif; padding: 40px; max-width: 900px; margin: 0 auto; line-height: 1.8; }}
+img {{ max-width: 100%; }}
+pre {{ background: #f4f4f4; padding: 12px; border-radius: 4px; overflow-x: auto; }}
+code {{ background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }}
+table {{ border-collapse: collapse; width: 100%; }}
+th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+th {{ background-color: #f2f2f2; }}
+</style>
+</head>
+<body>
+{html_body}
+</body>
+</html>"""
+
+    # Write HTML to a temp file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, encoding="utf-8") as f:
+        f.write(html)
+        temp_html_path = f.name
+
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(f"file:///{temp_html_path}", wait_until="networkidle")
+            page.pdf(path=file_path, format="A4", print_background=True)
+            browser.close()
+        print(f"Report written to {file_path}")
+    finally:
+        os.unlink(temp_html_path)
 
 async def write_md_to_word(text: str, filename: str = "") -> str:
     """Converts Markdown text to a DOCX file and returns the file path.
