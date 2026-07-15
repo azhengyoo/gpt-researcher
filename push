@@ -1,0 +1,12 @@
+# 1. Fork 原作者仓库（GitHub 网页操作）
+
+# 2. 克隆自己的 fork
+git clone https://github.com/你的用户名/gpt-researcher.git
+cd gpt-researcher
+
+# 3. 添加原作者的仓库为 upstream，方便同步更新
+git remote add upstream https://github.com/assafelovic/gpt-researcher.git
+
+# 4. 之后原作者有更新时，同步到本地
+git fetch upstream
+git merge upstream/main
