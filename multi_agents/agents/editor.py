@@ -1,6 +1,6 @@
 from datetime import datetime
 import asyncio
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from langgraph.graph import StateGraph, END
 
@@ -19,7 +19,7 @@ class EditorAgent:
         self.tone = tone
         self.headers = headers or {}
 
-    async def plan_research(self, research_state: Dict[str, any]) -> Dict[str, any]:
+    async def plan_research(self, research_state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Plan the research outline based on initial research and task parameters.
 
@@ -49,7 +49,7 @@ class EditorAgent:
             "sections": plan.get("sections"),
         }
 
-    async def run_parallel_research(self, research_state: Dict[str, any]) -> Dict[str, List[str]]:
+    async def run_parallel_research(self, research_state: Dict[str, Any]) -> Dict[str, List[str]]:
         """
         Execute parallel research tasks for each section.
 
@@ -115,7 +115,7 @@ class EditorAgent:
                    '{{title: string research title, date: today's date, 
                    sections: ['section header 1', 'section header 2', 'section header 3' ...]}}'."""
 
-    def _initialize_agents(self) -> Dict[str, any]:
+    def _initialize_agents(self) -> Dict[str, Any]:
         """Initialize the research, reviewer, and reviser skills."""
         return {
             "research": ResearchAgent(self.websocket, self.stream_output, self.tone, self.headers),
@@ -158,7 +158,7 @@ class EditorAgent:
                 agent="EDITOR",
             )
 
-    def _create_task_input(self, research_state: Dict[str, any], query: str, title: str) -> Dict[str, any]:
+    def _create_task_input(self, research_state: Dict[str, Any], query: str, title: str) -> Dict[str, Any]:
         """Create the input for a single research task."""
         return {
             "task": research_state.get("task"),

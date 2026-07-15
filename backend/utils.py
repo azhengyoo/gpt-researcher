@@ -83,39 +83,37 @@ async def write_md_to_pdf(text: str, filename: str = "") -> str:
     os.makedirs("outputs", exist_ok=True)
     file_path = f"outputs/{safe_name}.pdf"
 
+    # Resolve css path relative to this backend module to avoid
+    # dependency on the current working directory.
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    css_path = os.path.join(current_dir, "styles", "pdf_styles.css")
+
+    # Prefer Playwright (cross-platform, no GTK needed) over WeasyPrint
     try:
-        # Resolve css path relative to this backend module to avoid
-        # dependency on the current working directory.
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        css_path = os.path.join(current_dir, "styles", "pdf_styles.css")
-        
-        # Preprocess image URLs for PDF compatibility
-        processed_text = _preprocess_images_for_pdf(text)
-        
-        # Set base_url to current directory for resolving any remaining relative paths
-        base_url = os.path.abspath(".")
-        from md2pdf.core import md2pdf
-        md2pdf(
-               file_path,
-               raw=processed_text,
-               css=css_path,
-               base_url=base_url,
-            )
-        print(f"Report written to {file_path}")
+        await _write_md_to_pdf_playwright(text, css_path, file_path)
     except Exception as e:
-        print(f"WeasyPrint failed (GTK may not be installed): {e}")
-        print("Falling back to Playwright for PDF generation...")
+        print(f"Playwright PDF failed: {e}")
+        print("Falling back to WeasyPrint...")
         try:
-            _write_md_to_pdf_playwright(text, css_path, file_path)
+            processed_text = _preprocess_images_for_pdf(text)
+            base_url = os.path.abspath(".")
+            from md2pdf.core import md2pdf
+            md2pdf(
+                   file_path,
+                   raw=processed_text,
+                   css=css_path,
+                   base_url=base_url,
+                )
+            print(f"Report written to {file_path}")
         except Exception as e2:
-            print(f"Playwright PDF fallback also failed: {e2}")
+            print(f"WeasyPrint also failed: {e2}")
             return ""
 
     encoded_file_path = urllib.parse.quote(file_path)
     return encoded_file_path
 
 
-def _write_md_to_pdf_playwright(text: str, css_path: str, file_path: str) -> None:
+async def _write_md_to_pdf_playwright(text: str, css_path: str, file_path: str) -> None:
     """Fallback PDF generation using Playwright (cross-platform, no GTK needed).
 
     Converts markdown → HTML, then uses headless Chromium to render to PDF.
@@ -158,16 +156,40 @@ th {{ background-color: #f2f2f2; }}
         temp_html_path = f.name
 
     try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.goto(f"file:///{temp_html_path}", wait_until="networkidle")
-            page.pdf(path=file_path, format="A4", print_background=True)
-            browser.close()
+        _ensure_playwright_browsers()
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            await page.goto(f"file:///{temp_html_path}", wait_until="networkidle")
+            await page.pdf(path=file_path, format="A4", print_background=True)
+            await browser.close()
         print(f"Report written to {file_path}")
     finally:
         os.unlink(temp_html_path)
+
+
+def _ensure_playwright_browsers() -> None:
+    """Auto-install Playwright Chromium if not already present."""
+    import subprocess
+    from playwright.sync_api import sync_playwright
+
+    try:
+        with sync_playwright() as p:
+            p.chromium.launch(headless=True).close()
+        return  # already installed
+    except Exception:
+        pass
+
+    print("Playwright browsers not found, auto-installing chromium...")
+    env = os.environ.copy()
+    env.setdefault("PLAYWRIGHT_DOWNLOAD_HOST", "https://npmmirror.com/mirrors/playwright/")
+    subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        check=False,
+        env=env,
+    )
+    print("Playwright chromium installation complete.")
 
 async def write_md_to_word(text: str, filename: str = "") -> str:
     """Converts Markdown text to a DOCX file and returns the file path.

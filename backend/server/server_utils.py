@@ -172,6 +172,12 @@ async def handle_start_command(websocket, data: str, manager):
         max_search_results,
     )
     report = str(report)
+    # Notify frontend that file generation has started (prevents "stuck" feeling)
+    await websocket.send_json({
+        "type": "logs",
+        "content": "info",
+        "output": "正在生成 PDF / Word / Markdown 报告文件，请稍候...",
+    })
     file_paths = await generate_report_files(report, sanitized_filename)
     # Add JSON log path to file_paths
     file_paths["json"] = os.path.relpath(logs_handler.log_file)

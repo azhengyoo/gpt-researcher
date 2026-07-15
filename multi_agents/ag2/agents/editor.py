@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 from multi_agents.agents.utils.views import print_agent_output
 from multi_agents.agents.utils.llms import call_model
@@ -14,7 +14,7 @@ class EditorAgent:
         self.tone = tone
         self.headers = headers or {}
 
-    async def plan_research(self, research_state: Dict[str, any]) -> Dict[str, any]:
+    async def plan_research(self, research_state: Dict[str, Any]) -> Dict[str, Any]:
         initial_research = research_state.get("initial_research")
         task = research_state.get("task")
         include_human_feedback = task.get("include_human_feedback")
