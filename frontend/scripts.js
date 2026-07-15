@@ -63,6 +63,13 @@ const GPTResearcher = (() => {
     // Initialize MCP functionality
     initMCPSection();
 
+    // Initialize document path section visibility
+    initDocConfigSection();
+
+    // Initialize confirmation modal button listeners
+    document.getElementById('btnConfirmApprove')?.addEventListener('click', () => sendConfirmationResponse(true));
+    document.getElementById('btnConfirmCancel')?.addEventListener('click', () => sendConfirmationResponse(false));
+
     // The download bar is now fixed in place with CSS
     // No need to set display property here
 
@@ -781,6 +788,11 @@ const GPTResearcher = (() => {
     document.getElementById('reportContainer').innerHTML = ''
     dispose_socket?.() // Call previous dispose function if it exists
 
+    // Reset reconnection state so a new research always sends a fresh start command
+    lastRequestData = null;
+    reconnectAttempts = 0;
+    messagesReceived = 0;
+
     // Reset report variables
     allReports = '';
     currentReport = '';
@@ -856,6 +868,9 @@ const GPTResearcher = (() => {
     let downloadLinkData = null; // Store download links
 
     socket.onmessage = (event) => {
+      // Clear any pending response timeout (set in onopen)
+      clearTimeout(connectionTimeout);
+
       // Reset reconnect attempts on successful message
       reconnectAttempts = 0;
 
@@ -867,7 +882,14 @@ const GPTResearcher = (() => {
       lastActivityTime = Date.now();
       updateWebSocketStatus();
 
-      if (data.type === 'logs') {
+      if (data.type === 'ack') {
+        // Server acknowledged the request — show status so user knows backend is alive
+        addAgentResponse(data)
+      } else if (data.type === 'confirmation_required') {
+        // Backend is requesting user confirmation (e.g., fallback to web search)
+        console.log("[WS] Confirmation required:", data);
+        showConfirmationModal(data, socket);
+      } else if (data.type === 'logs') {
         if (data.content === 'subqueries' && data.metadata && Array.isArray(data.metadata)) {
           displaySubQuestions(data.metadata)
         }
@@ -886,13 +908,37 @@ const GPTResearcher = (() => {
         const isDetailedReport = report_type === 'detailed_report';
 
         if (isDetailedReport) {
-          allReports += data.output; // Accumulate raw markdown
-          // Always render the HTML of *all accumulated markdown* for detailed reports during streaming.
-          // writeReport will replace the container's content.
-          writeReport({ output: allReports, type: 'report' }, converter, false, false);
+          allReports += data.output; // Accumulate raw markdown for final render
+          // Stream each chunk as an append — converting only the new ~1-2KB
+          // instead of re-converting ALL 50KB+ accumulated markdown every time.
+          // The final clean full render happens at report_complete or path.
+          writeReport({ output: data.output, type: 'report' }, converter, false, true);
         } else {
           // For all other report types, append HTML of current chunk to the container.
           writeReport({ output: data.output, type: 'report' }, converter, false, true); // append = true
+        }
+      } else if (data.type === 'report_complete') {
+        // Report content has been fully streamed; update UI to show completion
+        // even though file generation (PDF/Word) is still in progress.
+        updateState('finished')
+
+        // For detailed_report, do the final accumulated render
+        const report_type = document.querySelector('select[name="report_type"]').value;
+        if (report_type === 'detailed_report' && allReports) {
+          const finalData = { output: allReports, type: 'report' };
+          writeReport(finalData, converter, true, false); // isFinal=true, append=false
+        }
+
+        // Append completion marker at the end of the report
+        const reportContainer = document.getElementById('reportContainer');
+        if (reportContainer && reportContainer.innerHTML) {
+          const marker = document.createElement('div');
+          marker.className = 'report-complete-marker';
+          marker.innerHTML = '<hr style="margin:32px 0 16px;border:none;border-top:2px dashed #4caf50;">'
+            + '<p style="text-align:center;color:#4caf50;font-size:14px;font-weight:500;">'
+            + '✅ 报告生成完成</p>';
+          reportContainer.appendChild(marker);
+          reportContainer.scrollTop = reportContainer.scrollHeight;
         }
       } else if (data.type === 'path') {
         updateState('finished')
@@ -937,74 +983,112 @@ const GPTResearcher = (() => {
     }
 
     socket.onopen = (event) => {
-      // Clear the connection timeout
-      clearTimeout(connectionTimeout);
+      try {
+        console.log("[WS] onopen fired, preparing to send start command");
 
-      // Update WebSocket metrics
-      connectionStartTime = Date.now();
-      lastActivityTime = Date.now();
-      updateWebSocketStatus();
+        // Clear the connection timeout
+        clearTimeout(connectionTimeout);
 
-      // Reset reconnect attempts on successful connection
-      reconnectAttempts = 0;
+        // Update WebSocket metrics
+        connectionStartTime = Date.now();
+        lastActivityTime = Date.now();
+        updateWebSocketStatus();
 
-      // Ensure the research icon is spinning when connection is established
-      updateResearchIcon(true);
+        // Reset reconnect attempts on successful connection
+        reconnectAttempts = 0;
 
-      // If this is a reconnection and we're in research mode, don't send a new start command
-      if (isResearchActive && lastRequestData) {
-        console.log("Reconnected during active research, not sending new start command");
-        return;
+        // Ensure the research icon is spinning when connection is established
+        updateResearchIcon(true);
+
+        // If this is a reconnection and we're in research mode, don't send a new start command
+        if (isResearchActive && lastRequestData) {
+          console.log("[WS] Reconnected during active research, not sending new start command");
+          return;
+        }
+
+        const task = document.getElementById('task').value
+        const report_type = document.querySelector(
+          'select[name="report_type"]'
+        ).value
+        const report_source = document.querySelector(
+          'select[name="report_source"]'
+        ).value
+        const tone = document.querySelector('select[name="tone"]').value
+        const agent = document.querySelector('input[name="agent"]:checked').value
+        let source_urls = tags
+
+        if (report_source !== 'sources' && source_urls.length > 0) {
+          source_urls = source_urls.slice(0, source_urls.length - 1)
+        }
+
+        const query_domains_str = document.querySelector('input[name="query_domains"]').value
+        let query_domains = []
+        if (query_domains_str) {
+          query_domains = query_domains_str.split(',')
+            .map((domain) => domain.trim())
+            .filter((domain) => domain.length > 0);
+        }
+
+        // Collect document configuration
+        const docPath = document.getElementById('docPath')?.value?.trim() || '';
+        const documentUrlsStr = document.getElementById('documentUrls')?.value?.trim() || '';
+        const document_urls = documentUrlsStr
+          ? documentUrlsStr.split(',').map(s => s.trim()).filter(s => s.length > 0)
+          : [];
+
+        const requestData = {
+          task: task,
+          report_type: report_type,
+          report_source: report_source,
+          source_urls: source_urls,
+          tone: tone,
+          agent: agent,
+          query_domains: query_domains,
+          max_search_results: parseInt(document.getElementById('maxSearchResults').value, 10) || 5,
+          doc_path: docPath,
+          document_urls: document_urls,
+        }
+
+        // Add MCP configuration if enabled
+        const mcpData = collectMCPData();
+        if (mcpData) {
+          Object.assign(requestData, mcpData);
+          console.log('Including MCP configuration:', mcpData);
+        }
+
+        // Store the request data for potential reconnection
+        lastRequestData = requestData;
+
+        const msg = `start ${JSON.stringify(requestData)}`
+        console.log("[WS] Sending start command, length:", msg.length);
+        socket.send(msg)
+
+        // Set a response timeout: if no response within 8s, show error to user
+        connectionTimeout = setTimeout(() => {
+          if (isResearchActive && messagesReceived === 0) {
+            console.error("[WS] No response from server within 8s of onopen");
+            updateResearchIcon(false);
+            updateState('error');
+            addAgentResponse({
+              output: '❌ 服务端无响应，请检查后端是否正常，或刷新页面重试。'
+            });
+          }
+        }, 8000);
+
+      } catch (e) {
+        console.error("[WS] Error in onopen:", e);
+        updateResearchIcon(false);
+        updateState('error');
+        addAgentResponse({
+          output: `❌ 请求发送失败: ${e.message}`
+        });
       }
-
-      const task = document.getElementById('task').value
-      const report_type = document.querySelector(
-        'select[name="report_type"]'
-      ).value
-      const report_source = document.querySelector(
-        'select[name="report_source"]'
-      ).value
-      const tone = document.querySelector('select[name="tone"]').value
-      const agent = document.querySelector('input[name="agent"]:checked').value
-      let source_urls = tags
-
-      if (report_source !== 'sources' && source_urls.length > 0) {
-        source_urls = source_urls.slice(0, source_urls.length - 1)
-      }
-
-      const query_domains_str = document.querySelector('input[name="query_domains"]').value
-      let query_domains = []
-      if (query_domains_str) {
-        query_domains = query_domains_str.split(',')
-          .map((domain) => domain.trim())
-          .filter((domain) => domain.length > 0);
-      }
-
-      const requestData = {
-        task: task,
-        report_type: report_type,
-        report_source: report_source,
-        source_urls: source_urls,
-        tone: tone,
-        agent: agent,
-        query_domains: query_domains,
-        max_search_results: parseInt(document.getElementById('maxSearchResults').value, 10) || 5,
-      }
-
-      // Add MCP configuration if enabled
-      const mcpData = collectMCPData();
-      if (mcpData) {
-        Object.assign(requestData, mcpData);
-        console.log('Including MCP configuration:', mcpData);
-      }
-
-      // Store the request data for potential reconnection
-      lastRequestData = requestData;
-
-      socket.send(`start ${JSON.stringify(requestData)}`)
     }
 
     socket.onclose = (event) => {
+      // Clear any pending timeout so it doesn't fire after close
+      clearTimeout(connectionTimeout);
+
       // Update metrics and status when connection closes
       connectionStartTime = null;
       updateWebSocketStatus();
@@ -1025,6 +1109,7 @@ const GPTResearcher = (() => {
     // return dispose function
     return () => {
       try {
+        clearTimeout(connectionTimeout);
         isResearchActive = false; // Mark research as inactive
         if (socket && socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) {
           socket.close();
@@ -1055,10 +1140,9 @@ const GPTResearcher = (() => {
 
   const addAgentResponse = (data) => {
     const output = document.getElementById('output');
-    const responseDiv = document.createElement('div');
-    responseDiv.className = 'agent_response';
-    responseDiv.innerHTML = sanitizeHtml(data.output);
-    output.appendChild(responseDiv);
+    // Use insertAdjacentHTML to avoid creating intermediate element + innerHTML parse
+    output.insertAdjacentHTML('beforeend',
+      `<div class="agent_response">${sanitizeHtml(data.output)}</div>`);
     output.scrollTop = output.scrollHeight;
     output.style.display = 'block';
   }
@@ -1091,24 +1175,21 @@ const GPTResearcher = (() => {
   const writeReport = (data, converter, isFinal = false, append = false) => {
     const reportContainer = document.getElementById('reportContainer');
 
-    // Convert markdown to HTML, then sanitize to prevent XSS from untrusted
-    // report content (scraped pages / LLM output).
-    const markdownOutput = sanitizeHtml(converter.makeHtml(data.output));
+    const scrollToBottom = () => {
+      reportContainer.scrollTop = reportContainer.scrollHeight;
+    };
 
-    // If this is the final report or we should append
     if (isFinal) {
-      // For final reports, always replace content
+      // Full clean render at the end (report_complete / path events)
+      const markdownOutput = sanitizeHtml(converter.makeHtml(data.output));
       reportContainer.innerHTML = markdownOutput;
-    } else if (append) {
-      // Append mode - add to existing content
-      reportContainer.innerHTML += markdownOutput;
+      scrollToBottom();
     } else {
-      // Replace mode - overwrite existing content
-      reportContainer.innerHTML = markdownOutput;
+      // Streaming append — only convert & insert the new chunk (fast)
+      const markdownOutput = sanitizeHtml(converter.makeHtml(data.output));
+      reportContainer.insertAdjacentHTML('beforeend', markdownOutput);
+      scrollToBottom();
     }
-
-    // Auto-scroll to the bottom of the container
-    reportContainer.scrollTop = reportContainer.scrollHeight;
   }
 
   const updateDownloadLink = (data) => {
@@ -1223,6 +1304,7 @@ const GPTResearcher = (() => {
         status = 'Research finished!'
         setReportActionsStatus('enabled')
         isResearchActive = false;
+        lastRequestData = null;
         // Stop the research icon spinning
         updateResearchIcon(false);
 
@@ -1260,6 +1342,7 @@ const GPTResearcher = (() => {
         status = '研究失败！'
         setReportActionsStatus('disabled')
         isResearchActive = false;
+        lastRequestData = null;
         // Stop the research icon spinning
         updateResearchIcon(false);
         break
@@ -1267,6 +1350,7 @@ const GPTResearcher = (() => {
         status = ''
         setReportActionsStatus('hidden')
         isResearchActive = false;
+        lastRequestData = null;
         // Make sure the research icon is not spinning initially
         updateResearchIcon(false);
         // Hide the copy button in the header
@@ -2186,6 +2270,69 @@ const GPTResearcher = (() => {
 
     // Initial validation
     validateMCPConfig();
+  };
+
+  // Show/hide document configuration sections based on report_source selection
+  const initDocConfigSection = () => {
+    const reportSource = document.getElementById('report_source');
+    const docPathSection = document.getElementById('docPathSection');
+    const docUrlsSection = document.getElementById('docUrlsSection');
+
+    if (!reportSource) return;
+
+    const toggleDocConfig = () => {
+      const source = reportSource.value;
+      // Local document path: shown for local and hybrid
+      if (docPathSection) {
+        docPathSection.style.display = (source === 'local' || source === 'hybrid') ? 'block' : 'none';
+      }
+      // Online document URLs: shown for online_docs and hybrid
+      if (docUrlsSection) {
+        docUrlsSection.style.display = (source === 'online_docs' || source === 'hybrid') ? 'block' : 'none';
+      }
+    };
+
+    reportSource.addEventListener('change', toggleDocConfig);
+    // Initial state
+    toggleDocConfig();
+  };
+
+  // Confirmation modal logic
+  let pendingConfirmationId = null;
+  let pendingConfirmationSocket = null;
+
+  const showConfirmationModal = (data, ws) => {
+    const overlay = document.getElementById('confirmationOverlay');
+    const question = document.getElementById('confirmationQuestion');
+    const message = document.getElementById('confirmationMessage');
+    const approveBtn = document.getElementById('btnConfirmApprove');
+
+    if (!overlay || !question || !message) return;
+
+    question.textContent = data.question || '确认操作';
+    message.textContent = data.message || '';
+    approveBtn.textContent = '同意降级';
+    overlay.classList.add('active');
+    pendingConfirmationId = data.confirmation_id;
+    pendingConfirmationSocket = ws;
+  };
+
+  const hideConfirmationModal = () => {
+    const overlay = document.getElementById('confirmationOverlay');
+    if (overlay) overlay.classList.remove('active');
+    pendingConfirmationId = null;
+    pendingConfirmationSocket = null;
+  };
+
+  const sendConfirmationResponse = (approved) => {
+    if (!pendingConfirmationSocket || !pendingConfirmationId) return;
+    const payload = JSON.stringify({
+      confirmation_id: pendingConfirmationId,
+      approved: approved,
+    });
+    const msg = `confirmation_response ${payload}`;
+    pendingConfirmationSocket.send(msg);
+    hideConfirmationModal();
   };
 
   // Validate MCP JSON configuration

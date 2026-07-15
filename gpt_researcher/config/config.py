@@ -146,12 +146,14 @@ class Config:
 
     def _set_doc_path(self, config: Dict[str, Any]) -> None:
         self.doc_path = config['DOC_PATH']
-        if self.doc_path:
-            try:
-                self.validate_doc_path()
-            except Exception as e:
-                print(f"Warning: Error validating doc_path: {str(e)}. Using default doc_path.")
-                self.doc_path = DEFAULT_CONFIG['DOC_PATH']
+        if not self.doc_path:
+            self.doc_path = DEFAULT_CONFIG['DOC_PATH']
+        try:
+            self.validate_doc_path()
+        except Exception as e:
+            print(f"Warning: Error validating doc_path: {str(e)}. Using default doc_path.")
+            self.doc_path = DEFAULT_CONFIG['DOC_PATH']
+            self.validate_doc_path()
 
     @classmethod
     def load_config(cls, config_path: str | None) -> Dict[str, Any]:

@@ -275,13 +275,28 @@ The response should contain ONLY the list.
         """
 
         reference_prompt = ""
-        if report_source == ReportSource.Web.value:
+        # Web, OnlineDocs, and Hybrid modes all involve web-sourced URLs that
+        # should be cited with hyperlinks.  Only pure-local/document-only modes
+        # should use the "document names" citation format.
+        _url_report_sources = {
+            ReportSource.Web.value,
+            ReportSource.OnlineDocs.value,
+            ReportSource.Hybrid.value,
+        }
+        if report_source in _url_report_sources:
             reference_prompt = f"""
 You MUST write all used source urls at the end of the report as references, and make sure to not add duplicated sources, but only one reference for each.
 Every url should be hyperlinked: [url website](url)
 Additionally, you MUST include hyperlinks to the relevant URLs wherever they are referenced in the report:
 
 eg: Author, A. A. (Year, Month Date). Title of web page. Website Name. [url website](url)
+
+CRITICAL RULES FOR URL ATTRIBUTION — VIOLATING THESE WILL MAKE THE REPORT INVALID:
+- The Information above is divided into numbered sections like "--- Source [1] ---". Each section has exactly ONE URL.
+- Each entity (movie, product, person, etc.) MUST be hyperlinked with the EXACT "URL:" that belongs to the SAME "[Source N]" section where that entity is mentioned. Example: if "Movie X" appears in Source [1] with URL "url-A", and "Movie Y" appears in Source [2] with URL "url-B", then "Movie X" MUST link to "url-A" and "Movie Y" MUST link to "url-B". NEVER swap them.
+- NEVER fabricate, guess, or modify URLs. Use only the exact URLs from the "URL:" field in the Information.
+- If multiple entities are described within the SAME [Source N] section, all of them MUST use that section's one URL. Do NOT create different URLs for entities within the same section.
+- Before finalizing, verify: for each hyperlinked entity, identify which [Source N] section it came from, and confirm the URL matches that section's "URL:".
 """
         else:
             reference_prompt = f"""
@@ -364,10 +379,21 @@ The response MUST not contain any markdown format or additional text (like ```js
         """
 
         reference_prompt = ""
-        if report_source == ReportSource.Web.value:
+        _url_report_sources = {
+            ReportSource.Web.value,
+            ReportSource.OnlineDocs.value,
+            ReportSource.Hybrid.value,
+        }
+        if report_source in _url_report_sources:
             reference_prompt = f"""
             You MUST include all relevant source urls.
             Every url should be hyperlinked: [url website](url)
+
+CRITICAL RULES FOR URL ATTRIBUTION:
+- The Information above is divided into numbered sections like "--- Source [1] ---". Each section has exactly ONE URL.
+- Each entity MUST be hyperlinked with the EXACT "URL:" that belongs to the SAME "[Source N]" section.
+- NEVER swap URLs between entities. NEVER fabricate or modify URLs.
+- If multiple entities are within the SAME [Source N] section, all use that section's one URL.
             """
         else:
             reference_prompt = f"""
@@ -437,13 +463,28 @@ The response MUST not contain any markdown format or additional text (like ```js
             str: The deep research report prompt
         """
         reference_prompt = ""
-        if report_source == ReportSource.Web.value:
+        # Web, OnlineDocs, and Hybrid modes all involve web-sourced URLs that
+        # should be cited with hyperlinks.  Only pure-local/document-only modes
+        # should use the "document names" citation format.
+        _url_report_sources = {
+            ReportSource.Web.value,
+            ReportSource.OnlineDocs.value,
+            ReportSource.Hybrid.value,
+        }
+        if report_source in _url_report_sources:
             reference_prompt = f"""
 You MUST write all used source urls at the end of the report as references, and make sure to not add duplicated sources, but only one reference for each.
 Every url should be hyperlinked: [url website](url)
 Additionally, you MUST include hyperlinks to the relevant URLs wherever they are referenced in the report:
 
 eg: Author, A. A. (Year, Month Date). Title of web page. Website Name. [url website](url)
+
+CRITICAL RULES FOR URL ATTRIBUTION — VIOLATING THESE WILL MAKE THE REPORT INVALID:
+- The Information above is divided into numbered sections like "--- Source [1] ---". Each section has exactly ONE URL.
+- Each entity (movie, product, person, etc.) MUST be hyperlinked with the EXACT "URL:" that belongs to the SAME "[Source N]" section where that entity is mentioned. Example: if "Movie X" appears in Source [1] with URL "url-A", and "Movie Y" appears in Source [2] with URL "url-B", then "Movie X" MUST link to "url-A" and "Movie Y" MUST link to "url-B". NEVER swap them.
+- NEVER fabricate, guess, or modify URLs. Use only the exact URLs from the "URL:" field in the Information.
+- If multiple entities are described within the SAME [Source N] section, all of them MUST use that section's one URL. Do NOT create different URLs for entities within the same section.
+- Before finalizing, verify: for each hyperlinked entity, identify which [Source N] section it came from, and confirm the URL matches that section's "URL:".
 """
         else:
             reference_prompt = f"""
@@ -554,7 +595,8 @@ Instructions:
     @staticmethod
     def pretty_print_docs(docs: list[Document], top_n: int | None = None) -> str:
         """Compress the list of documents into a context string"""
-        return f"\n".join(f"Source: {d.metadata.get('source')}\n"
+        return f"\n".join(f"--- Source [{i+1}] ---\n"
+                          f"URL: {d.metadata.get('source')}\n"
                           f"Title: {d.metadata.get('title')}\n"
                           f"Content: {d.page_content}\n"
                           for i, d in enumerate(docs)
@@ -784,9 +826,10 @@ class Granite3PromptFamily(PromptFamily):
         if not docs:
             return ""
         all_documents = "\n\n".join([
-            f"Document {doc.metadata.get('source', i)}\n" + \
-            f"Title: {doc.metadata.get('title')}\n" + \
-            doc.page_content
+            f"--- Source [{i+1}] ---\n"
+            f"URL: {doc.metadata.get('source', '')}\n"
+            f"Title: {doc.metadata.get('title')}\n"
+            + doc.page_content
             for i, doc in enumerate(docs)
             if top_n is None or i < top_n
         ])

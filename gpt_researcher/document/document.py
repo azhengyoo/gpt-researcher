@@ -56,7 +56,7 @@ class DocumentLoader:
                     })
                     
         if not docs:
-            raise ValueError("🤷 Failed to load any documents!")
+            raise ValueError("Failed to load any documents! The document path may be empty or contain no supported file types (PDF, DOCX, TXT, MD, CSV, HTML, PPTX, XLS/XLSX).")
 
         return docs
 

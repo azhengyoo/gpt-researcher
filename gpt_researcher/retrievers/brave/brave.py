@@ -52,9 +52,13 @@ class BraveSearch:
             "Accept": "application/json",
             "Accept-Encoding": "gzip",
         }
-        # TODO: Add support for query domains
+        # Apply domain filtering via site: operator
+        search_query = self.query
+        if self.query_domains:
+            domain_filter = " OR ".join(f"site:{d}" for d in self.query_domains)
+            search_query = f"({domain_filter}) {search_query}"
         params = {
-            "q": self.query,
+            "q": search_query,
             "count": min(max_results, 20),
         }
 

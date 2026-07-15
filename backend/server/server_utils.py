@@ -9,7 +9,10 @@ from typing import Awaitable, Dict, List, Any
 from fastapi.responses import JSONResponse, FileResponse
 from gpt_researcher.document.document import DocumentLoader
 from gpt_researcher import GPTResearcher
-from utils import write_md_to_pdf, write_md_to_word, write_text_to_md
+from gpt_researcher.actions import stream_output
+from gpt_researcher.utils.confirmations import pending_confirmations
+from starlette.websockets import WebSocketDisconnect
+from backend.utils import write_md_to_pdf, write_md_to_word, write_text_to_md
 from pathlib import Path
 from datetime import datetime
 from fastapi import HTTPException
@@ -138,11 +141,24 @@ async def handle_start_command(websocket, data: str, manager):
         mcp_strategy,
         mcp_configs,
         max_search_results,
+        doc_path,
     ) = extract_command_data(json_data)
 
     if not task or not report_type:
         print("Error: Missing task or report_type")
         return
+
+    # Immediate feedback to prevent frontend timeout / user refresh
+    await websocket.send_json({
+        "type": "logs",
+        "content": "info",
+        "output": f"🔍 正在研究：{task[:80]}{'...' if len(task) > 80 else ''}",
+    })
+    await websocket.send_json({
+        "type": "logs",
+        "content": "info",
+        "output": "⏳ 正在初始化研究引擎，请稍候...",
+    })
 
     # Create logs handler with websocket and task
     logs_handler = CustomLogsHandler(websocket, task)
@@ -170,8 +186,11 @@ async def handle_start_command(websocket, data: str, manager):
         mcp_strategy,
         mcp_configs,
         max_search_results,
+        doc_path,
     )
     report = str(report)
+    # Signal frontend that report content is fully loaded (decouple from file generation)
+    await websocket.send_json({"type": "report_complete"})
     # Notify frontend that file generation has started (prevents "stuck" feeling)
     await websocket.send_json({
         "type": "logs",
@@ -340,6 +359,8 @@ async def handle_websocket_communication(websocket, manager):
             except asyncio.CancelledError:
                 logger.info("Task cancelled.")
                 raise
+            except WebSocketDisconnect as e:
+                logger.info(f"WebSocket disconnected (client closed): code={e.code}")
             except Exception as e:
                 logger.error(f"Error running task: {e}\n{traceback.format_exc()}")
                 await websocket.send_json(
@@ -360,6 +381,19 @@ async def handle_websocket_communication(websocket, manager):
                 
                 if data == "ping":
                     await websocket.send_text("pong")
+                elif data.strip().startswith("confirmation_response"):
+                    # Handle user response to a confirmation request (can happen during running task)
+                    try:
+                        resp = json.loads(data.strip()[len("confirmation_response"):].strip())
+                        conf_id = resp.get("confirmation_id")
+                        approved = resp.get("approved", False)
+                        if conf_id and conf_id in pending_confirmations:
+                            pending_confirmations[conf_id].set_result(approved)
+                            logger.info(f"Confirmation {conf_id}: user {'approved' if approved else 'rejected'}")
+                        else:
+                            logger.warning(f"Received confirmation response for unknown id: {conf_id}")
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.error(f"Invalid confirmation_response format: {e}")
                 elif running_task and not running_task.done():
                     # discard any new request if a task is already running
                     logger.warning(
@@ -375,6 +409,11 @@ async def handle_websocket_communication(websocket, manager):
                 # Normalize command detection by checking startswith after stripping whitespace
                 elif data.strip().startswith("start"):
                     logger.info(f"Processing start command")
+                    # Send immediate ACK so the frontend knows the backend is alive
+                    await websocket.send_json({
+                        "type": "ack",
+                        "output": "✅ 服务端已收到请求，正在处理..."
+                    })
                     running_task = run_long_running_task(
                         handle_start_command(websocket, data, manager)
                     )
@@ -393,6 +432,9 @@ async def handle_websocket_communication(websocket, manager):
                         "content": "error",
                         "output": "Unknown command received by server"
                     })
+            except WebSocketDisconnect as e:
+                logger.info(f"WebSocket disconnected (client closed): code={e.code}")
+                break
             except Exception as e:
                 logger.error(f"WebSocket error: {str(e)}\n{traceback.format_exc()}")
                 print(f"WebSocket error: {e}")
@@ -401,7 +443,21 @@ async def handle_websocket_communication(websocket, manager):
         if running_task and not running_task.done():
             running_task.cancel()
 
+def _clean_doc_path(path: str) -> str:
+    """Strip invisible Unicode bidirectional control characters often
+    introduced when copying a path from Windows File Explorer."""
+    if not path:
+        return path
+    # U+200E LEFT-TO-RIGHT MARK,  U+200F RIGHT-TO-LEFT MARK,
+    # U+202A LEFT-TO-RIGHT EMBEDDING, U+202B RIGHT-TO-LEFT EMBEDDING,
+    # U+202C POP DIRECTIONAL FORMATTING,
+    # U+202D LEFT-TO-RIGHT OVERRIDE, U+202E RIGHT-TO-LEFT OVERRIDE
+    _BAD_CHARS = "\u200e\u200f\u202a\u202b\u202c\u202d\u202e"
+    return path.strip().strip(_BAD_CHARS)
+
+
 def extract_command_data(json_data: Dict) -> tuple:
+    doc_path = _clean_doc_path(json_data.get("doc_path", ""))
     return (
         json_data.get("task"),
         json_data.get("report_type"),
@@ -415,4 +471,5 @@ def extract_command_data(json_data: Dict) -> tuple:
         json_data.get("mcp_strategy", "fast"),
         json_data.get("mcp_configs", []),
         json_data.get("max_search_results"),
+        doc_path,
     )

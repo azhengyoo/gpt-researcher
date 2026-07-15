@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 import random
+from urllib.parse import urlparse
 
 from ..actions.agent_creator import choose_agent
 from ..actions.query_processing import get_search_results, plan_research_outline
@@ -161,27 +162,68 @@ class ResearchConductor:
             research_data = await self._get_context_by_web_search(self.researcher.query, [], self.researcher.query_domains)
         elif self.researcher.report_source == ReportSource.Local.value:
             self.logger.info("Using local search")
-            document_data = await DocumentLoader(self.researcher.cfg.doc_path).load()
+            document_data = await self._load_local_documents(self.researcher.cfg.doc_path)
+            if document_data is None:
+                # User rejected the downgrade — research cancelled
+                self.logger.info("用户拒绝了从本地文档改为在线搜索，研究取消")
+                return ""
+            if not document_data:
+                # _load_local_documents already handles the confirmation flow
+                self.logger.warning("No local documents found, falling back to web search")
+                research_data = await self._get_context_by_web_search(self.researcher.query, [], self.researcher.query_domains)
+                return research_data
             self.logger.info(f"Loaded {len(document_data)} documents")
             if self.researcher.vector_store:
                 self.researcher.vector_store.load(document_data)
 
             research_data = await self._get_context_by_web_search(self.researcher.query, document_data, self.researcher.query_domains)
+        elif self.researcher.report_source == ReportSource.OnlineDocs.value:
+            research_data = await self._conduct_online_docs_research()
         # Hybrid search including both local documents and web sources
         elif self.researcher.report_source == ReportSource.Hybrid.value:
+            document_data = []
+            website_domains = []
+
             if self.researcher.document_urls:
-                document_data = await OnlineDocumentLoader(self.researcher.document_urls).load()
+                # Split into document URLs and website domains
+                doc_urls = []
+                for url in self.researcher.document_urls:
+                    parsed = urlparse(url)
+                    ext = os.path.splitext(parsed.path)[1].strip('.').lower()
+                    if ext in self._DOC_EXTENSIONS:
+                        doc_urls.append(url)
+                    else:
+                        domain = parsed.netloc
+                        if domain:
+                            website_domains.append(domain)
+
+                if doc_urls:
+                    document_data = await OnlineDocumentLoader(doc_urls).load()
             else:
-                document_data = await DocumentLoader(self.researcher.cfg.doc_path).load()
-            if self.researcher.vector_store:
-                self.researcher.vector_store.load(document_data)
-            # The local-docs pass and the web pass are independent, so run
-            # them concurrently; visited_urls still dedupes across both.
-            docs_context, web_context = await asyncio.gather(
-                self._get_context_by_web_search(self.researcher.query, document_data, self.researcher.query_domains),
-                self._get_context_by_web_search(self.researcher.query, [], self.researcher.query_domains),
-            )
-            research_data = self.researcher.prompt_family.join_local_web_documents(docs_context, web_context)
+                document_data = await self._load_local_documents(self.researcher.cfg.doc_path)
+
+            # Merge domains from URL extraction with configured query_domains
+            all_domains = list(set(self.researcher.query_domains + website_domains))
+
+            if document_data:
+                if self.researcher.vector_store:
+                    self.researcher.vector_store.load(document_data)
+                # The local-docs pass and the web pass are independent, so run
+                # them concurrently; visited_urls still dedupes across both.
+                docs_context, web_context = await asyncio.gather(
+                    self._get_context_by_web_search(self.researcher.query, document_data, all_domains),
+                    self._get_context_by_web_search(self.researcher.query, [], all_domains),
+                )
+                research_data = self.researcher.prompt_family.join_local_web_documents(docs_context, web_context)
+            elif website_domains:
+                # No documents loaded but have website domains to search
+                self.logger.info(f"Hybrid mode: searching within domains {website_domains}")
+                research_data = await self._get_context_by_web_search(
+                    self.researcher.query, [], all_domains
+                )
+            else:
+                self.logger.warning("No local or online documents found in hybrid mode, falling back to web search")
+                research_data = await self._get_context_by_web_search(self.researcher.query, [], self.researcher.query_domains)
         elif self.researcher.report_source == ReportSource.Azure.value:
             from ..document.azure_document_loader import AzureDocumentLoader
             azure_loader = AzureDocumentLoader(
@@ -228,7 +270,7 @@ class ResearchConductor:
             await stream_output(
                 "logs",
                 "research_step_finalized",
-                f"Finalized research step.\n💸 Total Research Costs: ${self.researcher.get_costs()}",
+                f"Finalized research step.\nTotal Research Costs: ${self.researcher.get_costs()}",
                 self.researcher.websocket,
             )
             if self.json_handler:
@@ -237,6 +279,232 @@ class ResearchConductor:
 
         self.logger.info(f"Research completed. Context size: {len(str(self.researcher.context))}")
         return self.researcher.context
+
+    async def _load_local_documents(self, doc_path: str) -> list:
+        """Load documents from a local path, with graceful fallback.
+
+        If the document path doesn't exist or is empty, asks the user via
+        frontend confirmation whether to fall back to web search.
+
+        Args:
+            doc_path: Path to the document directory or file.
+
+        Returns:
+            List of loaded documents, or empty list if path doesn't exist.
+        """
+        if not os.path.exists(doc_path):
+            # Ask user for consent via frontend confirmation
+            websocket = getattr(self.researcher, 'websocket', None)
+            if websocket:
+                from ..utils.confirmations import request_user_confirmation
+                approved = await request_user_confirmation(
+                    websocket,
+                    message=(
+                        f"文档目录 '{doc_path}' 不存在。\n\n"
+                        "您可以：\n"
+                        "1. 同意降级 → 自动使用网络搜索代替\n"
+                        "2. 拒绝 → 取消本次研究，先创建目录并放入文档"
+                    ),
+                    question=f"文档目录 '{doc_path}' 不存在，是否降级为网络搜索？",
+                )
+                if not approved:
+                    self.logger.warning("用户拒绝了从本地文档改为在线搜索")
+                    await stream_output(
+                        "logs",
+                        "user_rejected",
+                        "用户拒绝了从本地文档改为在线搜索，研究已取消",
+                        websocket,
+                    )
+                    return None  # Special return value to indicate user rejection
+                self.logger.warning(
+                    f"Document path '{doc_path}' not found, user approved fallback to web search"
+                )
+                return []
+            else:
+                # No websocket (e.g., CLI mode) — auto-create directory silently
+                self.logger.warning(
+                    f"Document path '{doc_path}' does not exist. "
+                    f"Creating it now. Please place your documents (PDF, DOCX, TXT, etc.) there."
+                )
+                try:
+                    os.makedirs(doc_path, exist_ok=True)
+                except OSError:
+                    self.logger.error(f"Failed to create directory: {doc_path}")
+                    return []
+                return []
+
+        # Check if directory is empty (when it's a directory path)
+        if os.path.isdir(doc_path):
+            has_files = False
+            for root, dirs, files in os.walk(doc_path):
+                for f in files:
+                    if not f.startswith('.'):  # skip hidden files
+                        has_files = True
+                        break
+                if has_files:
+                    break
+            if not has_files:
+                websocket = getattr(self.researcher, 'websocket', None)
+                if websocket:
+                    from ..utils.confirmations import request_user_confirmation
+                    approved = await request_user_confirmation(
+                        websocket,
+                        message=(
+                            f"文档目录 '{doc_path}' 存在但为空。\n\n"
+                            "您可以：\n"
+                            "1. 同意降级 → 自动使用网络搜索代替\n"
+                            "2. 拒绝 → 取消本次研究，先放入文档文件"
+                        ),
+                        question=f"文档目录 '{doc_path}' 为空，是否降级为网络搜索？",
+                    )
+                    if not approved:
+                        self.logger.warning("用户拒绝了从本地文档改为在线搜索")
+                        await stream_output(
+                            "logs",
+                            "user_rejected",
+                            "用户拒绝了从本地文档改为在线搜索，研究已取消",
+                            websocket,
+                        )
+                        return None  # Special return value to indicate user rejection
+                self.logger.warning(
+                    f"Document path '{doc_path}' exists but contains no files."
+                )
+                return []
+
+        try:
+            return await DocumentLoader(doc_path).load()
+        except ValueError as e:
+            self.logger.warning(f"Document loading skipped: {e}")
+            return []
+        except Exception as e:
+            self.logger.error(f"Unexpected error loading documents: {e}")
+            return []
+
+    # Document file extensions handled via direct download
+    _DOC_EXTENSIONS = {'pdf', 'doc', 'docx', 'pptx', 'csv', 'xls', 'xlsx', 'md', 'txt'}
+
+    async def _conduct_online_docs_research(self):
+        """Handle OnlineDocs source: separate document URLs from website URLs.
+
+        - Document URLs (PDF, DOCX, etc.) → download and parse content directly
+        - Website URLs (normal web pages) → extract the domain and use it as a
+          search filter (site:domain.com), allowing the research query to search
+          within that specific website for relevant content.
+        """
+        self.logger.info("Using online document search")
+        if not self.researcher.document_urls:
+            self.logger.warning("No online document URLs provided")
+            await stream_output(
+                "logs", "error",
+                "未提供在线文档URL地址，请填写后重新开始研究",
+                self.researcher.websocket,
+            )
+            return ""
+
+        doc_urls = []
+        website_domains = []
+
+        for url in self.researcher.document_urls:
+            parsed = urlparse(url)
+            ext = os.path.splitext(parsed.path)[1].strip('.').lower()
+            if ext in self._DOC_EXTENSIONS:
+                doc_urls.append(url)
+            else:
+                domain = parsed.netloc
+                if domain:
+                    website_domains.append(domain)
+                else:
+                    self.logger.warning(f"Could not extract domain from URL: {url}")
+
+        self.logger.info(
+            f"Online docs split: {len(doc_urls)} document(s), "
+            f"{len(website_domains)} website domain(s) {website_domains}"
+        )
+
+        # Load document-type URLs
+        document_data = []
+        if doc_urls:
+            await stream_output(
+                "logs", "info",
+                f"正在下载并解析 {len(doc_urls)} 个在线文档...",
+                self.researcher.websocket,
+            )
+            loader = OnlineDocumentLoader(doc_urls)
+            try:
+                document_data = await loader.load()
+            except Exception as e:
+                self.logger.error(f"Failed to load online documents: {e}")
+                await stream_output(
+                    "logs", "error",
+                    f"在线文档地址不存在或无法访问：{e}",
+                    self.researcher.websocket,
+                )
+                if not website_domains:
+                    return ""
+                document_data = []
+
+            if not document_data and loader.failed_urls:
+                failed_items = [
+                    f"- {url}: {reason}"
+                    for url, reason in loader.failed_urls.items()
+                ]
+                failed_info = "\n" + "\n".join(failed_items)
+                self.logger.warning(f"部分在线文档加载失败{failed_info}")
+                await stream_output(
+                    "logs", "warning",
+                    f"以下在线文档加载失败：{failed_info}",
+                    self.researcher.websocket,
+                )
+
+            self.logger.info(f"Loaded {len(document_data)} online documents")
+
+        # Search within website domains using the research query
+        if website_domains:
+            await stream_output(
+                "logs", "info",
+                f"正在网站 {', '.join(website_domains)} 内搜索相关内容...",
+                self.researcher.websocket,
+            )
+
+        # Merge configured query_domains with domains extracted from URLs
+        all_domains = list(set(self.researcher.query_domains + website_domains))
+
+        if self.researcher.vector_store and document_data:
+            self.researcher.vector_store.load(document_data)
+
+        research_data = await self._get_context_by_web_search(
+            self.researcher.query, document_data, all_domains
+        )
+
+        # Collect and stream source URLs found within the target website(s)
+        if website_domains:
+            domain_urls = []
+            for url in self.researcher.visited_urls:
+                parsed = urlparse(url)
+                if parsed.netloc in website_domains:
+                    domain_urls.append(url)
+
+            if domain_urls:
+                self.logger.info(
+                    f"Found {len(domain_urls)} URL(s) within target website(s)"
+                )
+                url_lines = "\n".join(
+                    f"- {u}" for u in domain_urls[:20]
+                )
+                await stream_output(
+                    "logs", "source_urls",
+                    f"在目标网站内找到 {len(domain_urls)} 个相关链接：\n{url_lines}",
+                    self.researcher.websocket,
+                )
+            else:
+                self.logger.warning("No URLs from target website found in search results")
+                await stream_output(
+                    "logs", "warning",
+                    "搜索完成，但未在目标网站内找到匹配的页面链接。请尝试更换搜索词或确保目标网站可被搜索引擎索引。",
+                    self.researcher.websocket,
+                )
+
+        return research_data
 
     async def _get_context_by_urls(self, urls):
         """Scrapes and compresses the context from the given urls"""
@@ -827,41 +1095,42 @@ class ResearchConductor:
         if query_domains is None:
             query_domains = []
 
-        # Iterate through the currently set retrievers
-        # This allows the method to work when retrievers are temporarily modified
-        for retriever_class in self.researcher.retrievers:
-            # Skip MCP retrievers as they don't provide URLs for scraping
+        async def _search_with_retriever(retriever_class):
+            """Search using a single retriever, returning (new_urls, prefetched)."""
+            urls = []
+            prefetched = []
             if "mcpretriever" in retriever_class.__name__.lower():
-                continue
-
+                return urls, prefetched
             try:
-                # Instantiate the retriever with the sub-query
                 retriever = retriever_class(query, query_domains=query_domains)
-
-                # Perform the search using the current retriever
                 search_results = await asyncio.to_thread(
                     retriever.search, max_results=self.researcher.cfg.max_search_results_per_query
                 )
-
                 if not search_results:
-                    continue
-
-                # Separate results that already have content from those needing scraping
+                    return urls, prefetched
                 for result in search_results:
                     url = result.get("href") or result.get("url")
                     raw_content = result.get("raw_content")
                     if url and raw_content and len(raw_content) > 100:
-                        # Only raw_content signals that a retriever already fetched the full page.
-                        # body is snippet-sized text for most web retrievers and still needs scraping.
-                        prefetched_content.append({
-                            "url": url,
-                            "raw_content": raw_content,
-                        })
+                        prefetched.append({"url": url, "raw_content": raw_content})
                         self.researcher.add_research_sources([{"url": url}])
                     elif url:
-                        new_search_urls.append(url)
+                        urls.append(url)
             except Exception as e:
                 self.logger.error(f"Error searching with {retriever_class.__name__}: {e}")
+            return urls, prefetched
+
+        # Run all retrievers in parallel instead of serial iteration
+        results = await asyncio.gather(
+            *[_search_with_retriever(rc) for rc in self.researcher.retrievers],
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Exception):
+                continue
+            urls, prefetched = result
+            new_search_urls.extend(urls)
+            prefetched_content.extend(prefetched)
 
         # Get unique URLs
         new_search_urls = await self._get_new_urls(new_search_urls)

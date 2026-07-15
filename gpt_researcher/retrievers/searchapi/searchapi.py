@@ -15,8 +15,10 @@ class SearchApiSearch():
         Initializes the SearchApiSearch object
         Args:
             query:
+            query_domains: list of domains to restrict search to
         """
         self.query = query
+        self.query_domains = query_domains or None
         self.api_key = self.get_api_key()
 
     def get_api_key(self):
@@ -41,10 +43,15 @@ class SearchApiSearch():
         print("SearchApiSearch: Searching with query {0}...".format(self.query))
         """Useful for general internet search queries using SearchApi."""
 
+        # Apply domain filtering via site: operator
+        search_query = self.query
+        if self.query_domains:
+            domain_filter = " OR ".join(f"site:{d}" for d in self.query_domains)
+            search_query = f"({domain_filter}) {search_query}"
 
         url = "https://www.searchapi.io/api/v1/search"
         params = {
-            "q": self.query,
+            "q": search_query,
             "engine": "google",
         }
 

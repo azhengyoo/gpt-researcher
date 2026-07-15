@@ -1,4 +1,5 @@
 import hashlib
+import os
 import time
 from fastapi import WebSocket
 from typing import Any
@@ -22,6 +23,7 @@ class BasicReport:
         mcp_configs=None,
         mcp_strategy=None,
         max_search_results=None,
+        doc_path="",
     ):
         self.query = query
         self.query_domains = query_domains
@@ -62,6 +64,13 @@ class BasicReport:
         # Override max_search_results_per_query if provided by user
         if max_search_results is not None:
             self.gpt_researcher.cfg.max_search_results_per_query = int(max_search_results)
+        # Override doc_path if provided by frontend (local/hybrid mode)
+        if doc_path:
+            # Strip invisible Unicode bidirectional control characters
+            # that Windows Explorer sometimes prepends when copying paths
+            doc_path = doc_path.strip().strip("\u200e\u200f\u202a\u202b\u202c\u202d\u202e")
+            os.makedirs(doc_path, exist_ok=True)
+            self.gpt_researcher.cfg.doc_path = doc_path
 
     def _generate_research_id(self, query: str) -> str:
         """Generate a unique research ID from query and timestamp."""

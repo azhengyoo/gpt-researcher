@@ -45,10 +45,14 @@ class SearxSearch():
             List of dictionaries containing search results
         """
         search_url = urljoin(self.base_url, "search")
-        # TODO: Add support for query domains
+        # Apply domain filtering via site: operator
+        search_query = self.query
+        if self.query_domains:
+            domain_filter = " OR ".join(f"site:{d}" for d in self.query_domains)
+            search_query = f"({domain_filter}) {search_query}"
         params = {
             # The search query.
-            'q': self.query,
+            'q': search_query,
             # Output format of results. Format needs to be activated in searxng config.
             'format': 'json'
         }

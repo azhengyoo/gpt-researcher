@@ -33,8 +33,13 @@ class BoChaSearch():
             'Authorization': f'Bearer {self.api_key}',  # 请替换为你的API密钥
             'Content-Type': 'application/json'
         }
+        # Apply domain filtering via site: operator
+        search_query = self.query
+        if self.query_domains:
+            domain_filter = " OR ".join(f"site:{d}" for d in self.query_domains)
+            search_query = f"({domain_filter}) {search_query}"
         data = {
-            "query": self.query,
+            "query": search_query,
             "freshness": "noLimit",  # 搜索的时间范围，
             "summary": True,  # 是否返回长文本摘要
             "count": max_results

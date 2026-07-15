@@ -1,20 +1,23 @@
 from dotenv import load_dotenv
 import logging
+import sys
 from pathlib import Path
 
 # Create logs directory if it doesn't exist
 logs_dir = Path("logs")
 logs_dir.mkdir(exist_ok=True)
 
-# Configure logging
+# Configure logging with UTF-8 encoding for Windows compatibility
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         # File handler for general application logs
-        logging.FileHandler('logs/app.log'),
-        # Stream handler for console output
-        logging.StreamHandler()
+        logging.FileHandler('logs/app.log', encoding='utf-8'),
+        # Stream handler for console output (UTF-8)
+        logging.StreamHandler(
+            open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1, closefd=False)
+        ),
     ]
 )
 

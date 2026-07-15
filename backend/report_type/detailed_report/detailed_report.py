@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import os
 import time
 from typing import List, Dict, Set, Optional, Any
 from fastapi import WebSocket
@@ -25,6 +26,7 @@ class DetailedReport:
         mcp_configs=None,
         mcp_strategy=None,
         max_search_results=None,
+        doc_path="",
     ):
         self.query = query
         self.report_type = report_type
@@ -69,6 +71,13 @@ class DetailedReport:
         # Override max_search_results_per_query if provided by user
         if max_search_results is not None:
             self.gpt_researcher.cfg.max_search_results_per_query = int(max_search_results)
+        # Override doc_path if provided by frontend (local/hybrid mode)
+        if doc_path:
+            # Strip invisible Unicode bidirectional control characters
+            # that Windows Explorer sometimes prepends when copying paths
+            doc_path = doc_path.strip().strip("\u200e\u200f\u202a\u202b\u202c\u202d\u202e")
+            os.makedirs(doc_path, exist_ok=True)
+            self.gpt_researcher.cfg.doc_path = doc_path
         self.existing_headers: List[Dict] = []
         self.global_context: List[str] = []
         self.global_written_sections: List[str] = []
