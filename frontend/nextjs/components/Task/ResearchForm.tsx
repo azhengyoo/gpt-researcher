@@ -32,7 +32,9 @@ export default function ResearchForm({
   let { report_type, report_source, tone, layoutType } = chatBoxSettings;
 
   const [domains, setDomains] = useState<Domain[]>([]);
-  const [documentUrls, setDocumentUrls] = useState("");
+  const [documentUrls, setDocumentUrls] = useState(
+    (chatBoxSettings.document_urls || []).join('\n')
+  );
 
   // Load domains from localStorage after hydration
   useEffect(() => {

@@ -413,6 +413,12 @@ class ResearchConductor:
                 domain = parsed.netloc
                 if domain:
                     website_domains.append(domain)
+                    # Also add the domain without "www." prefix to match
+                    # both www.example.com and example.com in search results
+                    if domain.startswith("www."):
+                        website_domains.append(domain[4:])
+                    else:
+                        website_domains.append(f"www.{domain}")
                 else:
                     self.logger.warning(f"Could not extract domain from URL: {url}")
 

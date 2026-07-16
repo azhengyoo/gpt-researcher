@@ -1,33 +1,8 @@
 # Frontend Application
 
-This frontend project aims to enhance the user experience of GPT-Researcher, providing an intuitive and efficient interface for automated research. It offers two deployment options to suit different needs and environments.
+This frontend project aims to enhance the user experience of GPT-Researcher, providing an intuitive and efficient interface for automated research. It uses NextJS for a robust, feature-rich experience.
 
-## Option 1: Static Frontend (FastAPI)
-
-A lightweight solution using FastAPI to serve static files.
-
-#### Prerequisites
-- Python 3.11+
-- pip
-
-#### Setup and Running
-
-1. Install required packages:
-   ```
-   pip install -r requirements.txt
-   ```
-
-2. Start the server:
-   ```
-   python -m uvicorn main:app
-   ```
-
-3. Access at `http://localhost:8000`
-
-#### Demo
-https://github.com/assafelovic/gpt-researcher/assets/13554167/dd6cf08f-b31e-40c6-9907-1915f52a7110
-
-## Option 2: NextJS Frontend
+## NextJS Frontend
 
 A more robust solution with enhanced features and performance.
 
@@ -64,13 +39,6 @@ Note: Requires backend server on `localhost:8000` as detailed in option 1.
 
 #### Demo
 https://github.com/user-attachments/assets/092e9e71-7e27-475d-8c4f-9dddd28934a3
-
-## Choosing an Option
-
-- Static Frontend: Quick setup, lightweight deployment.
-- NextJS Frontend: Feature-rich, scalable, better performance and SEO.
-
-For production, NextJS is recommended.
 
 ## Frontend Features
 

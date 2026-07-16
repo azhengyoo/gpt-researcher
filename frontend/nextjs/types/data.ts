@@ -43,6 +43,7 @@ export interface ChatBoxSettings {
   report_source: string;
   tone: string;
   domains: string[];
+  document_urls?: string[];
   defaultReportType: string;
   layoutType: string;
   mcp_enabled: boolean;

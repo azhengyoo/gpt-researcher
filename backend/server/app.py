@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 from server.websocket_manager import WebSocketManager
 from server.server_utils import (
     get_config_dict, sanitize_filename,
-    update_environment_variables, handle_file_upload, handle_file_deletion,
+    handle_file_upload, handle_file_deletion,
     execute_multi_agents, handle_websocket_communication
 )
 from server.agent_discovery import build_agent_discovery_document

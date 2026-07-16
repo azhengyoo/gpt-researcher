@@ -312,11 +312,6 @@ def get_config_dict(
     }
 
 
-def update_environment_variables(config: Dict[str, str]):
-    for key, value in config.items():
-        os.environ[key] = value
-
-
 async def handle_file_upload(file, DOC_PATH: str) -> Dict[str, str]:
     file_path = os.path.join(DOC_PATH, os.path.basename(file.filename))
     with open(file_path, "wb") as buffer:
