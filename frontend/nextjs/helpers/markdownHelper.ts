@@ -2,7 +2,6 @@ import { remark } from 'remark';
 import html from 'remark-html';
 import remarkGfm from 'remark-gfm';
 import { Compatible } from "vfile";
-import DOMPurify from 'isomorphic-dompurify';
 
 /**
  * Adds target="_blank" and rel="noopener noreferrer" attributes to all links in HTML content
@@ -54,7 +53,11 @@ export const markdownToHtml = async (markdown: Compatible | string): Promise<str
     // Sanitize the final HTML to prevent XSS. Report content is derived from
     // untrusted sources (scraped web pages and LLM output) and is rendered via
     // dangerouslySetInnerHTML, so it must be sanitized before being returned.
-    htmlString = DOMPurify.sanitize(htmlString, { ADD_ATTR: ['target'] });
+    // Use dynamic import to avoid SSR issues with jsdom dependency.
+    if (typeof window !== 'undefined') {
+      const DOMPurify = (await import('isomorphic-dompurify')).default;
+      htmlString = DOMPurify.sanitize(htmlString, { ADD_ATTR: ['target'] });
+    }
 
     return htmlString;
   } catch (error) {

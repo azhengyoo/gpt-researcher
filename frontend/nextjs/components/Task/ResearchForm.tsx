@@ -14,7 +14,8 @@ interface ResearchFormProps {
     task: string,
     reportType: string,
     reportSource: string,
-    domains: Domain[]
+    domains: Domain[],
+    documentUrls: string[]
   ) => void;
 }
 
@@ -30,14 +31,21 @@ export default function ResearchForm({
   // Destructure necessary fields from chatBoxSettings
   let { report_type, report_source, tone, layoutType } = chatBoxSettings;
 
-  const [domains, setDomains] = useState<Domain[]>(() => {
-    if (typeof window !== 'undefined') {
+  const [domains, setDomains] = useState<Domain[]>([]);
+  const [documentUrls, setDocumentUrls] = useState("");
+
+  // Load domains from localStorage after hydration
+  useEffect(() => {
+    try {
       const saved = localStorage.getItem('domainFilters');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) {
+        setDomains(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error('Error loading domain filters:', e);
     }
-    return [];
-  });
-  
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('domainFilters', JSON.stringify(domains));
     setChatBoxSettings(prev => ({
@@ -98,7 +106,11 @@ export default function ResearchForm({
         domains: domains.map(domain => domain.value)
       };
       setChatBoxSettings(updatedSettings);
-      onFormSubmit(task, report_type, report_source, domains);
+      const docUrls = documentUrls
+        .split('\n')
+        .map(url => url.trim())
+        .filter(url => url.length > 0);
+      onFormSubmit(task, report_type, report_source, domains, docUrls);
     }
   };
 
@@ -110,7 +122,7 @@ export default function ResearchForm({
     >
       <div className="form-group">
         <label htmlFor="report_type" className="agent_question">
-          Report Type{" "}
+          报告类型{" "}
         </label>
         <select
           name="report_type"
@@ -120,19 +132,19 @@ export default function ResearchForm({
           required
         >
           <option value="research_report">
-            Summary - Short and fast (~2 min)
+            摘要 - 快速简洁（约2分钟）
           </option>
-          <option value="deep">Deep Research Report</option>
-          <option value="multi_agents">Multi Agents Report</option>
+          <option value="deep">深度研究报告</option>
+          <option value="multi_agents">多智能体报告</option>
           <option value="detailed_report">
-            Detailed - In depth and longer (~5 min)
+            详细 - 深入全面（约5分钟）
           </option>
         </select>
       </div>
 
       <div className="form-group">
         <label htmlFor="report_source" className="agent_question">
-          Report Source{" "}
+          报告来源{" "}
         </label>
         <select
           name="report_source"
@@ -141,13 +153,42 @@ export default function ResearchForm({
           className="form-control-static"
           required
         >
-          <option value="web">The Internet</option>
-          <option value="local">My Documents</option>
-          <option value="hybrid">Hybrid</option>
+          <option value="web">互联网</option>
+          <option value="online_docs">在线文档</option>
+          <option value="local">我的文档</option>
+          <option value="hybrid">混合来源</option>
         </select>
       </div>
 
       
+
+      {report_source === "online_docs" || report_source === "hybrid" ? (
+        <div className="form-group">
+          <label htmlFor="document_urls" className="agent_question">
+            在线文档地址（每行一个URL）{" "}
+          </label>
+          <textarea
+            id="document_urls"
+            name="document_urls"
+            value={documentUrls}
+            onChange={(e) => {
+              setDocumentUrls(e.target.value);
+              const urls = e.target.value
+                .split('\n')
+                .map(url => url.trim())
+                .filter(url => url.length > 0);
+              setChatBoxSettings((prev: any) => ({
+                ...prev,
+                document_urls: urls,
+              }));
+            }}
+            className="form-control-static w-full min-h-[80px]"
+            placeholder="https://docs.google.com/document/d/...
+https://example.com/report.pdf"
+            rows={4}
+          />
+        </div>
+      ) : null}
 
       {report_source === "local" || report_source === "hybrid" ? (
         <FileUpload />

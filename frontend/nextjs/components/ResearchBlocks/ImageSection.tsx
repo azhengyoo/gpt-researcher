@@ -12,7 +12,7 @@ const ImageSection = ({ metadata }: ImageSectionProps) => {
       <div className="flex items-start gap-4 pb-3 lg:pb-3.5">
         <img src="/img/image.svg" alt="images" width={24} height={24} />
         <h3 className="text-base font-bold uppercase leading-[152.5%] text-white">
-          Related Images
+          相关图片
         </h3>
       </div>
       <div className="overflow-y-auto max-h-[500px] scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-300/10">

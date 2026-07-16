@@ -18,7 +18,7 @@ export default function MobileHomeScreen({
   setPromptValue,
   handleDisplayResult,
   isLoading = false,
-  placeholder = "What would you like to research today?",
+  placeholder = "今天想研究什么？",
   handleKeyDown
 }: MobileHomeScreenProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -68,45 +68,38 @@ export default function MobileHomeScreen({
       return;
     }
     
+    // Set submitting state for UI feedback
+    setIsSubmitting(true);
+    
+    // Add a timeout as a safety measure to prevent infinite loading
+    submissionTimeoutRef.current = setTimeout(() => {
+      setIsSubmitting(false);
+      toast.error("研究请求超时，请重试。", {
+        duration: 3000,
+        position: "bottom-center"
+      });
+    }, 15000); // 15 second timeout
+    
     try {
-      // Set submitting state for UI feedback
-      setIsSubmitting(true);
+      // First show visual feedback
+      const trimmedPrompt = promptValue.trim();
       
-      // Add a timeout as a safety measure to prevent infinite loading
-      submissionTimeoutRef.current = setTimeout(() => {
-        setIsSubmitting(false);
-        toast.error("Research request took too long. Please try again.", {
-          duration: 3000,
-          position: "bottom-center"
-        });
-      }, 15000); // 15 second timeout
+      // Call the display result handler from props
+      await handleDisplayResult(trimmedPrompt);
       
-      // Create a new simplified direct API submission that won't use websockets
-      try {
-        // First show visual feedback
-        const trimmedPrompt = promptValue.trim();
-        
-        // Call the display result handler from props
-        await handleDisplayResult(trimmedPrompt);
-        
-        // Clear the timeout since we successfully completed
-        if (submissionTimeoutRef.current) {
-          clearTimeout(submissionTimeoutRef.current);
-          submissionTimeoutRef.current = null;
-        }
-      } catch (apiError) {
-        console.error("API error during research submission:", apiError);
-        toast.error("There was a problem submitting your research. Please try again.", {
-          duration: 3000,
-          position: "bottom-center"
-        });
-        
-        // Clear submission state
-        setIsSubmitting(false);
+      // Clear the timeout since we successfully completed
+      if (submissionTimeoutRef.current) {
+        clearTimeout(submissionTimeoutRef.current);
+        submissionTimeoutRef.current = null;
       }
     } catch (error) {
       console.error("Error during research submission:", error);
-      // Reset state in case of error
+      toast.error("提交研究时出现问题，请重试。", {
+        duration: 3000,
+        position: "bottom-center"
+      });
+    } finally {
+      // Reset submitting state
       setIsSubmitting(false);
       
       // Clear any existing timeout
@@ -143,7 +136,7 @@ export default function MobileHomeScreen({
             className="rounded-xl"
           />
         </div>
-        <p className="text-gray-400 text-sm">Say Hello to GPT Researcher, your AI partner for instant insights and comprehensive research</p>
+        <p className="text-gray-400 text-sm">你好，GPT 研究员是你获取即时洞察和全面研究的 AI 伙伴</p>
       </div>
 
       {/* Search Box */}
@@ -188,14 +181,14 @@ export default function MobileHomeScreen({
           </div>
         </div>
         <p className="text-xs text-gray-500 mt-2 text-center px-2">
-          Enter any research topic or specific question
+          输入任何研究主题或具体问题
         </p>
       </div>
 
       {/* Recent research history */}
       {recentHistory.length > 0 && (
         <div className="mt-10 px-4">
-          <h2 className="text-sm font-medium text-gray-400 mb-3 px-2">Recent Research</h2>
+          <h2 className="text-sm font-medium text-gray-400 mb-3 px-2">最近研究</h2>
           <div className="space-y-2">
             {recentHistory.map((item) => (
               <button
@@ -215,7 +208,7 @@ export default function MobileHomeScreen({
               href="/history"
               className="inline-block text-sm text-sky-400 hover:text-sky-300 transition-colors"
             >
-              View all research
+              查看全部研究
             </a>
           </div>
         </div>
@@ -224,19 +217,19 @@ export default function MobileHomeScreen({
       {/* Features or tips section */}
       <div className="mt-auto pb-6 pt-8 px-4">
         <div className="bg-gray-800/40 border border-gray-700/50 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-2">Research Tips</h3>
+          <h3 className="text-sm font-medium text-gray-300 mb-2">研究提示</h3>
           <ul className="text-xs text-gray-400 space-y-1.5">
             <li className="flex items-start">
               <span className="text-sky-400 mr-1.5">•</span>
-              <span>Ask specific questions for better results</span>
+              <span>提出具体问题以获得更好的结果</span>
             </li>
             <li className="flex items-start">
               <span className="text-sky-400 mr-1.5">•</span>
-              <span>Include key details like dates or context</span>
+              <span>包含日期或背景等关键细节</span>
             </li>
             <li className="flex items-start">
               <span className="text-sky-400 mr-1.5">•</span>
-              <span>Chat with your research results for deeper insights</span>
+              <span>与研究结果对话以获取更深入的见解</span>
             </li>
           </ul>
         </div>

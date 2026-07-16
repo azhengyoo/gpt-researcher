@@ -7,7 +7,7 @@ export default function AgentLogs({agentLogs}:any){
 
   return (
     <div className="margin-div">
-        <h2>Agent Output</h2>
+        <h2>智能体输出</h2>
         <div id="output">
           {renderAgentLogs(agentLogs)}
         </div>

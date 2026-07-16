@@ -33,36 +33,16 @@ export default function Home() {
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [isInChatMode, setIsInChatMode] = useState(false);
-  const [chatBoxSettings, setChatBoxSettings] = useState<ChatBoxSettings>(() => {
-    // Default settings
-    const defaultSettings = {
-      report_type: "research_report",
-      report_source: "web",
-      tone: "Objective",
-      domains: [],
-      defaultReportType: "research_report",
-      layoutType: 'copilot',
-      mcp_enabled: false,
-      mcp_configs: [],
-      mcp_strategy: "fast",
-    };
-
-    // Try to load all settings from localStorage
-    if (typeof window !== 'undefined') {
-      const savedSettings = localStorage.getItem('chatBoxSettings');
-      if (savedSettings) {
-        try {
-          const parsedSettings = JSON.parse(savedSettings);
-          return {
-            ...defaultSettings,
-            ...parsedSettings, // Override defaults with saved settings
-          };
-        } catch (e) {
-          console.error('Error parsing saved settings:', e);
-        }
-      }
-    }
-    return defaultSettings;
+  const [chatBoxSettings, setChatBoxSettings] = useState<ChatBoxSettings>({
+    report_type: "research_report",
+    report_source: "web",
+    tone: "Objective",
+    domains: [],
+    defaultReportType: "research_report",
+    layoutType: 'copilot',
+    mcp_enabled: false,
+    mcp_configs: [],
+    mcp_strategy: "fast",
   });
   const [question, setQuestion] = useState("");
   const [orderedData, setOrderedData] = useState<Data[]>([]);
@@ -220,7 +200,7 @@ export default function Home() {
           // Show error message
           setOrderedData(prevOrder => [...prevOrder, { 
             type: 'chat', 
-            content: 'Sorry, something went wrong. Please try again.' 
+            content: '抱歉，出了点问题，请重试。' 
           } as ChatData]);
         }
       } catch (error) {
@@ -229,7 +209,7 @@ export default function Home() {
         // Add error message
         setOrderedData(prevOrder => [...prevOrder, { 
           type: 'chat', 
-          content: 'Sorry, there was an error processing your request. Please try again.' 
+          content: '抱歉，处理请求时出错，请重试。' 
         } as ChatData]);
       } finally {
         setIsProcessingChat(false);
@@ -276,7 +256,7 @@ export default function Home() {
           // Show error message in results
           setOrderedData(prevOrder => [...prevOrder, { 
             type: 'chat', 
-            content: 'I apologize, but I couldn\'t generate a proper response. Please try asking your question again.' 
+            content: '抱歉，无法生成有效的回复，请重新提问。' 
           }]);
         } else {
           // Add AI response to chat history asynchronously
@@ -313,7 +293,7 @@ export default function Home() {
       // Add error message to display
       setOrderedData(prevOrder => [...prevOrder, { 
         type: 'chat', 
-        content: 'Sorry, there was an error processing your request. Please try again.' 
+        content: '抱歉，处理请求时出错，请重试。' 
       }]);
     } finally {
       setLoading(false);
@@ -396,7 +376,7 @@ export default function Home() {
           // Handle error
           setOrderedData(prevOrder => [...prevOrder, { 
             type: 'chat', 
-            content: 'Sorry, I couldn\'t generate a research response. Please try again.' 
+            content: '抱歉，无法生成研究回复，请重试。' 
           } as ChatData]);
         }
       } catch (error) {
@@ -404,7 +384,7 @@ export default function Home() {
         // Show error message
         setOrderedData(prevOrder => [...prevOrder, { 
           type: 'chat', 
-          content: 'Sorry, there was an error processing your request. Please try again.' 
+          content: '抱歉，处理请求时出错，请重试。' 
         } as ChatData]);
       } finally {
         setLoading(false);
@@ -534,7 +514,7 @@ export default function Home() {
           ...prevData, 
           { 
             type: 'chat', 
-            content: "I'm sorry, I couldn't generate a complete response. Please try rephrasing your question." 
+            content: "抱歉，无法生成完整的回复，请重新表述你的问题。" 
           } as ChatData
         ]);
       }
@@ -546,7 +526,7 @@ export default function Home() {
         ...prevData, 
         { 
           type: 'chat', 
-          content: "Sorry, there was an error processing your request. Please try again." 
+          content: "抱歉，处理请求时出错，请重试。" 
         } as ChatData
       ]);
     } finally {
@@ -645,7 +625,7 @@ export default function Home() {
       // Add error message
       setOrderedData(prevOrder => [...prevOrder, { 
         type: 'chat', 
-        content: 'Sorry, there was an error processing your request. Please try again.' 
+        content: '抱歉，处理请求时出错，请重试。' 
       } as ChatData]);
     } finally {
       setIsProcessingChat(false);
@@ -723,10 +703,10 @@ export default function Home() {
     const url = `${window.location.origin}/research/${currentResearchId}`;
     navigator.clipboard.writeText(url)
       .then(() => {
-        toast.success("URL copied to clipboard!");
+        toast.success("URL 已复制到剪贴板！");
       })
       .catch(() => {
-        toast.error("Failed to copy URL");
+        toast.error("复制 URL 失败");
       });
   };
 
@@ -799,7 +779,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error selecting research:', error);
-      toast.error('Could not load the selected research');
+      toast.error('无法加载所选研究');
     }
   };
 
@@ -841,6 +821,22 @@ export default function Home() {
     
     setAllLogs(newLogs);
   }, [orderedData]);
+
+  // Load chatBoxSettings from localStorage after hydration
+  useEffect(() => {
+    try {
+      const savedSettings = localStorage.getItem('chatBoxSettings');
+      if (savedSettings) {
+        const parsedSettings = JSON.parse(savedSettings);
+        setChatBoxSettings(prev => ({
+          ...prev,
+          ...parsedSettings,
+        }));
+      }
+    } catch (e) {
+      console.error('Error loading saved settings:', e);
+    }
+  }, []);
 
   // Save chatBoxSettings to localStorage when they change
   useEffect(() => {

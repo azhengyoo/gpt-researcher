@@ -8,12 +8,12 @@ import Script from 'next/script';
 
 const inter = Lexend({ subsets: ["latin"] });
 
-let title = "GPT Researcher";
+let title = "GPT 研究员";
 let description =
-  "LLM based autonomous agent that conducts local and web research on any topic and generates a comprehensive report with citations.";
+  "基于大语言模型的自主智能体，可对任意话题进行本地和网络研究，并生成带有引用的综合报告。";
 let url = "https://github.com/assafelovic/gpt-researcher";
 let ogimage = "/favicon.ico";
-let sitename = "GPT Researcher";
+let sitename = "GPT 研究员";
 
 export const metadata: Metadata = {
   metadataBase: new URL(url),
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     description,
     url: url,
     siteName: sitename,
-    locale: "en_US",
+    locale: "zh_CN",
     type: "website",
   },
   twitter: {
@@ -60,7 +60,7 @@ export default function RootLayout({
 }>) {
 
   return (
-    <html className="gptr-root" lang="en" suppressHydrationWarning>
+    <html className="gptr-root" lang="zh-CN" suppressHydrationWarning>
       <head>
         <PlausibleProvider domain="localhost:3000" />
         <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID!} />

@@ -168,11 +168,11 @@ export default function MobileResearchContent({
         // Show error for invalid or empty response
         const errorData: ChatData = {
           type: 'chat',
-          content: 'Sorry, I couldn\'t generate a proper response. Please try again.'
+          content: '抱歉，无法生成有效的回复，请重试。'
         };
         
         setLocalOrderedData(prev => [...prev, errorData]);
-        toast.error("Received an invalid response from the server", {
+        toast.error("收到服务器的无效响应", {
           duration: 3000,
           position: "bottom-center"
         });
@@ -183,11 +183,11 @@ export default function MobileResearchContent({
       
       const errorData: ChatData = {
         type: 'chat',
-        content: 'Sorry, there was an error processing your request. Please try again.'
+        content: '抱歉，处理请求时出错，请重试。'
       };
       
       setLocalOrderedData(prev => [...prev, errorData]);
-      toast.error("Failed to communicate with the server", {
+      toast.error("与服务器通信失败", {
         duration: 3000,
         position: "bottom-center"
       });
@@ -219,14 +219,14 @@ export default function MobileResearchContent({
               <>
                 <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse mr-2"></div>
                 <span className="text-xs text-gray-300">
-                  {localLoading ? "Researching..." : "Processing..."}
+                  {localLoading ? "正在研究..." : "正在处理..."}
                 </span>
               </>
             )}
             {!localLoading && !localProcessing && currentResearchId && (
               <>
                 <div className="w-2 h-2 rounded-full bg-teal-500 mr-2"></div>
-                <span className="text-xs text-gray-300">Research complete</span>
+                <span className="text-xs text-gray-300">研究已完成</span>
               </>
             )}
           </div>
@@ -242,7 +242,7 @@ export default function MobileResearchContent({
                 <polyline points="16 6 12 2 8 6"></polyline>
                 <line x1="12" y1="2" x2="12" y2="15"></line>
               </svg>
-              Share
+              分享
             </button>
           )}
         </div>

@@ -23,7 +23,7 @@ export default function Report({report}:any) {
 
     return (
         <div>
-            <h2>Research Report</h2>
+            <h2>研究报告</h2>
             <div id="reportContainer" className="markdown-content">
                 <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
             </div>

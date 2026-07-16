@@ -122,6 +122,11 @@ $ export TAVILY_API_KEY={Your Tavily API Key here}
 <br />
 
 > **第 4 步** - 使用 FastAPI 运行代理
+```bash
+cd frontend/nextjs
+npm install
+npm run dev
+```
 
 ```bash
 $ uvicorn main:app --reload

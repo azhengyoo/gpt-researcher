@@ -95,7 +95,7 @@ const ChatMessage = memo(({
               <div className="mt-2 pt-2 border-t border-gray-700/50 text-xs text-gray-200">
                 <details className="group">
                   <summary className="cursor-pointer hover:text-white flex items-center">
-                    <span className="mr-1">Sources</span>
+                    <span className="mr-1">来源</span>
                     <svg className="h-3 w-3 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                     </svg>
@@ -131,7 +131,7 @@ const ChatMessage = memo(({
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                 </svg>
               </div>
-              <span className="text-xs font-medium text-blue-300">Sources</span>
+              <span className="text-xs font-medium text-blue-300">来源</span>
             </div>
             <div className="max-h-[180px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-300/10">
               <div className="flex w-full flex-wrap content-center items-center gap-2">
@@ -307,7 +307,7 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
       }, 100);
     } catch (error) {
       console.error('Error submitting chat:', error);
-      toast.error('Failed to send message. Please try again.');
+      toast.error('发送消息失败，请重试。');
     } finally {
       setIsSubmitting(false);
     }
@@ -407,7 +407,7 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
               <img src="/img/gptr-logo.png" alt="AI" className="w-6 h-6" />
             </div>
             <div className="flex-1 ai-message-bubble rounded-2xl p-4 text-sm text-white shadow-lg">
-              <p>Hi there! I&apos;m your research assistant. Type your question and I&apos;ll help you find information and insights.</p>
+              <p>你好！我是你的研究助理。输入你的问题，我会帮你查找信息和见解。</p>
             </div>
           </div>
         )}
@@ -419,7 +419,7 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
               <img src="/img/gptr-logo.png" alt="AI" className="w-6 h-6" />
             </div>
             <div className="flex-1 ai-message-bubble rounded-2xl p-4 text-sm text-white shadow-lg">
-              <p>I&apos;m researching your question. This may take a moment...</p>
+              <p>我正在研究你的问题，这可能需要一点时间...</p>
               <div className="mt-2 flex justify-center">
                 <LoadingDots />
               </div>
@@ -466,7 +466,7 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
               onKeyDown={handleKeyDown}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
-              placeholder="Ask a research question..."
+              placeholder="提出你的研究问题..."
               className="w-full px-4 py-3 pr-14 bg-gray-800/90 border border-gray-700 focus:border-teal-500 rounded-xl resize-none text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-teal-500/50 transition-all shadow-sm"
               style={{ minHeight: '48px', maxHeight: '120px' }}
               disabled={isProcessingChat || isSubmitting}
@@ -495,13 +495,13 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
           </form>
         ) : (
           <div className="text-center p-3 text-gray-300 bg-gray-800/60 rounded-xl border border-gray-700/50 text-sm shadow-sm">
-            Research has been stopped. 
+            研究已停止。
             {onNewResearch && (
               <button 
                 onClick={onNewResearch} 
                 className="ml-2 text-teal-400 hover:text-teal-300 hover:underline font-medium"
               >
-                Start new research
+                开始新研究
               </button>
             )}
           </div>

@@ -21,20 +21,20 @@ const HumanFeedback: React.FC<HumanFeedbackProps> = ({ questionForHuman, websock
 
   return (
     <div className="bg-gray-100 p-4 rounded-lg shadow-md">
-      <h3 className="text-lg font-semibold mb-2">Human Feedback Required</h3>
+      <h3 className="text-lg font-semibold mb-2">需要人工反馈</h3>
       <p className="mb-4">{questionForHuman}</p>
       <form onSubmit={handleSubmit}>
         <textarea
           className="w-full p-2 border rounded-md"
           value={userFeedback}
           onChange={(e) => setUserFeedback(e.target.value)}
-          placeholder="Enter your feedback here (or leave blank for 'no')"
+          placeholder="请输入反馈（留空表示'否'）"
         />
         <button
           type="submit"
           className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
         >
-          Submit Feedback
+          提交反馈
         </button>
       </form>
     </div>

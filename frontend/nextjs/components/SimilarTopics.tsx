@@ -29,7 +29,7 @@ const SimilarTopics = ({
             className="block lg:hidden"
           />
           <h3 className="text-base font-bold uppercase text-black">
-            Similar topics:{" "}
+            相关话题：{" "}
           </h3>
         </div>
 
