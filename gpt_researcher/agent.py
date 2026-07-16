@@ -453,6 +453,12 @@ class GPTResearcher:
                     if not relevant_images:
                         relevant_images = all_search_images
 
+                    # LLM second-pass: remove images that are visually off-topic
+                    # for the research theme (e.g., forest sunset in a fashion report).
+                    relevant_images = await _filter_images_by_topic_relevance(
+                        relevant_images, self.query, self.cfg
+                    )
+
                     # Preserve metadata so the report writer can caption the
                     # image based on what it actually shows, not the section text.
                     for img in relevant_images:
@@ -1194,6 +1200,93 @@ def _is_generic_description(text: str) -> bool:
     if any(text.startswith(p) and len(meaningful_words) < 3 for p in generic_patterns):
         return True
     return False
+
+
+async def _filter_images_by_topic_relevance(
+    images: list[dict],
+    topic: str,
+    cfg,
+) -> list[dict]:
+    """Use LLM to filter out images that are not relevant to the research topic.
+
+    Even with keyword filtering, stock photo APIs can return near-matches that
+    are off-topic (e.g., a generic forest photo for a luxury fashion report).
+    This function asks an LLM to judge each image's relevance based on its
+    description and the research topic.
+
+    Args:
+        images: Image dicts with at least 'description'/'title' and 'url'.
+        topic: The research topic/query.
+        cfg: Config object for LLM access.
+
+    Returns:
+        List of images the LLM judges as relevant to the topic.
+    """
+    from ..utils.llm import create_chat_completion as _chat_completion
+
+    if not images:
+        return []
+
+    # Only run the LLM filter if we have enough candidates to make it worthwhile
+    # and we have a clear topic. Small lists are likely already relevant.
+    if len(images) <= 3:
+        return images
+
+    # Build a compact list of images for the LLM to judge
+    image_lines = []
+    for i, img in enumerate(images):
+        desc = img.get('description') or img.get('title') or 'Unknown image'
+        # Keep description concise
+        desc = desc[:120]
+        image_lines.append(f"{i+1}. {desc}")
+    image_list = "\n".join(image_lines)
+
+    prompt = (
+        f"Research topic: \"{topic}\"\n\n"
+        f"Below are candidate stock photos. For each one, reply ONLY with the numbers "
+        f"of images that are DIRECTLY RELEVANT to the topic. If none are relevant, "
+        f"reply with the word NONE.\n\n"
+        f"Rules:\n"
+        f"- A photo is relevant ONLY if it visually matches the subject matter of the topic.\n"
+        f"- Generic nature scenes (forests, sunsets, beaches, mountains) are NOT "
+        f"relevant for fashion, celebrity, luxury, technology, or business topics.\n"
+        f"- Abstract or unrelated objects (e.g., a coffee cup for a car review) are NOT relevant.\n"
+        f"- Reply with numbers separated by commas, e.g., '1, 3, 5' or 'NONE'.\n\n"
+        f"Images:\n{image_list}\n\n"
+        f"Relevant image numbers:"
+    )
+
+    try:
+        response = await _chat_completion(
+            model=cfg.smart_llm_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            llm_provider=cfg.smart_llm_provider,
+            max_tokens=100,
+            llm_kwargs=cfg.llm_kwargs,
+        )
+
+        response = response.strip().lower()
+        if not response or response in {"none", "无", "没有"}:
+            return []
+
+        # Parse numbers from response
+        selected_indices = set()
+        for token in re.findall(r'\d+', response):
+            try:
+                idx = int(token) - 1  # Convert from 1-based to 0-based
+                if 0 <= idx < len(images):
+                    selected_indices.add(idx)
+            except ValueError:
+                continue
+
+        if selected_indices:
+            return [images[i] for i in sorted(selected_indices)]
+    except Exception:
+        pass
+
+    # If LLM fails, return all images (downstream filters still apply)
+    return images
     """Derive a section placement hint from image metadata.
 
     Uses the search query that found the image and the image's own

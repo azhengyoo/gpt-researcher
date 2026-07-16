@@ -296,10 +296,12 @@ MATCHING LOGIC (follow strictly):
   based on what the surrounding paragraph says
 - SKIP an image entirely if:
   * Its Content description is unrelated to any section (e.g., "sunset beach" in a finance report)
-  * Its Content is too generic to add value (e.g., just "Photo by photographer")
+  * Its Content is too generic to add value (e.g., just "Photo by photographer", "Related illustration", "Forest", "Nature")
+  * It visually conflicts with the section topic (e.g., a forest for a luxury brand gala section, or a coffee cup for a sports section)
   * All sections that match its hint already have images
 - Distribute images across DIFFERENT sections — don't cluster all images in one section
-- Image dimensions and quality tags are shown for your awareness; prefer images marked "高清" for main sections"""
+- Image dimensions and quality tags are shown for your awareness; prefer images marked "高清" for main sections
+- WHEN IN DOUBT, LEAVE IT OUT. Never embed an image just to fill space."""
     try:
         report = await create_chat_completion(
             model=cfg.smart_llm_model,
