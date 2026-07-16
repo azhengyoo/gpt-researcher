@@ -43,9 +43,14 @@ class BaseConfig(TypedDict):
     MCP_ALLOWED_ROOT_PATHS: List[str]
     MCP_STRATEGY: str
     REASONING_EFFORT: str
-    # Image generation settings
+    # Image generation settings (AI-generated images)
     IMAGE_GENERATION_MODEL: Union[str, None]
     IMAGE_GENERATION_MAX_IMAGES: int
     IMAGE_GENERATION_ENABLED: bool
     IMAGE_GENERATION_STYLE: str  # Image style: "dark", "light", or "auto"
     IMAGE_GENERATION_PROVIDER: str  # Image provider: "google" or "modelslab"
+    # Image search settings (high-quality stock/web photos for embedding)
+    IMAGE_SEARCH_SOURCES: str  # Comma-separated: "unsplash,tavily" or "unsplash", "tavily", "" (disabled)
+    IMAGE_SEARCH_MAX_IMAGES: int  # Max images per source (total may be capped downstream)
+    IMAGE_SEARCH_MIN_WIDTH: int  # Minimum image width requirement (e.g. 1920 for Full HD+)
+    IMAGE_SEARCH_ORIENTATION: str  # Preferred orientation: "landscape", "portrait", or "all"

@@ -202,6 +202,10 @@ class ModelsLabImageGeneratorProvider:
 
     async def _request_images(self, payload: Dict[str, Any]) -> List[str]:
         """POST to text2img endpoint and handle async processing."""
+        # Mask API key for logging
+        log_payload = {**payload, "key": payload.get("key", "")[:8] + "..."}
+        logger.info(f"ModelsLab request: URL={TEXT2IMG_URL}, payload={log_payload}")
+        
         try:
             import aiohttp
 
@@ -212,15 +216,20 @@ class ModelsLabImageGeneratorProvider:
                     timeout=aiohttp.ClientTimeout(total=30),
                 ) as resp:
                     body = await resp.json()
+                    logger.info(f"ModelsLab response: status={resp.status}, body={body}")
         except ImportError:
             import requests
 
-            body = await asyncio.to_thread(
-                lambda: requests.post(TEXT2IMG_URL, json=payload, timeout=30).json()
+            resp = await asyncio.to_thread(
+                requests.post, TEXT2IMG_URL, json=payload, timeout=30
             )
+            body = resp.json()
+            logger.info(f"ModelsLab response: status={resp.status_code}, body={body}")
 
         if body.get("status") == "error":
-            raise RuntimeError(body.get("messege", "ModelsLab API error"))
+            error_msg = body.get("messege") or body.get("message") or "ModelsLab API error"
+            logger.error(f"ModelsLab API error response: {body}")
+            raise RuntimeError(error_msg)
 
         if body.get("status") == "processing" and body.get("id"):
             return await self._poll_for_result(body["id"])

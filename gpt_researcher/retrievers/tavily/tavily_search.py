@@ -101,11 +101,19 @@ class TavilySearch:
             # Raises a HTTPError if the HTTP request returned an unsuccessful status code
             response.raise_for_status()
 
-    def search(self, max_results=10):
+    def search(self, max_results=10, include_images=False):
         """
-        Searches the query
-        Returns:
+        Searches the query.
 
+        Args:
+            max_results: Maximum number of search results to return.
+            include_images: If True, include image URLs in the search results.
+                Enables Tavily's built-in image search capability.
+
+        Returns:
+            If include_images=False: list of dicts with 'href' and 'body'.
+            If include_images=True: (search_results: list[dict], images: list[dict])
+                where images list contains dicts with 'url', 'description', 'score' (6), 'source' ("tavily").
         """
         try:
             # LLM-generated queries often use Google-style site: operators,
@@ -127,6 +135,7 @@ class TavilySearch:
                 max_results=max_results,
                 topic=self.topic,
                 include_domains=include_domains,
+                include_images=include_images,
             )
             sources = results.get("results", [])
             if not sources:
@@ -142,7 +151,26 @@ class TavilySearch:
                     continue
                 body = obj.get("content") or obj.get("snippet") or ""
                 search_response.append({"href": href, "body": body})
+
+            # Extract image results if requested
+            image_results = []
+            if include_images:
+                tavily_images = results.get("images", [])
+                for img_obj in tavily_images:
+                    if isinstance(img_obj, dict):
+                        img_url = img_obj.get("url") or img_obj.get("src")
+                        if img_url and img_url.startswith(("http://", "https://")):
+                            image_results.append({
+                                "url": img_url,
+                                "description": img_obj.get("description", ""),
+                                "score": 6,  # Higher than scraped images, below Unsplash
+                                "source": "tavily",
+                            })
         except Exception as e:
             print(f"Error: {e}. Failed fetching sources. Resulting in empty response.")
             search_response = []
+            image_results = []
+
+        if include_images:
+            return search_response, image_results
         return search_response

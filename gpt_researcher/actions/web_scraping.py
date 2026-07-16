@@ -5,6 +5,7 @@ from gpt_researcher.utils.workers import WorkerPool
 from ..scraper import Scraper
 from ..config.config import Config
 from ..utils.logger import get_formatted_logger
+from ..scraper.utils import normalize_image_url
 
 logger = get_formatted_logger()
 
@@ -24,6 +25,7 @@ async def scrape_urls(
     """
     scraped_data = []
     images = []
+    seen_urls = set()  # Cross-page deduplication
     user_agent = (
         cfg.user_agent
         if cfg
@@ -36,7 +38,12 @@ async def scrape_urls(
         scraped_data = await scraper.run()
         for item in scraped_data:
             if 'image_urls' in item:
-                images.extend(item['image_urls'])
+                for img_dict in item['image_urls']:
+                    img_url = img_dict.get('url', '')
+                    norm_key = normalize_image_url(img_url)
+                    if norm_key and norm_key not in seen_urls:
+                        seen_urls.add(norm_key)
+                        images.append(img_dict)
     except Exception as e:
         print(f"{Fore.RED}Error in scrape_urls: {e}{Style.RESET_ALL}")
     finally:

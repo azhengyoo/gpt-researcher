@@ -259,18 +259,47 @@ async def generate_report(
     
     # Add available images instruction if images were pre-generated
     if available_images:
-        images_info = "\n".join([
-            f"- Image {i+1}: ![{img.get('title', img.get('alt_text', 'Illustration'))}]({img['url']}) - {img.get('section_hint', 'General')}"
-            for i, img in enumerate(available_images)
-        ])
+        # Group images by section_hint for better LLM comprehension
+        images_info_lines = []
+        for i, img in enumerate(available_images):
+            hint = img.get('section_hint', 'General')
+            title = img.get('title', img.get('alt_text', 'Illustration'))
+            dims = f" [{img['dimensions']}]" if img.get('dimensions') else ""
+            quality = f" ({img['quality']})" if img.get('quality') else ""
+            images_info_lines.append(
+                f"  Image {i+1}: {img['url']}{dims}{quality}\n"
+                f"    Content: {title}\n"
+                f"    Fits section about: {hint}"
+            )
+        images_info = "\n".join(images_info_lines)
+        
         content += f"""
 
-AVAILABLE IMAGES:
-You have the following pre-generated images available. Embed them in relevant sections of your report using the exact markdown syntax provided:
+AVAILABLE HIGH-RESOLUTION IMAGES:
+You have {len(available_images)} high-quality images available. Each image has a "Fits section about" hint telling you which section/paragraph it naturally belongs to.
 
 {images_info}
 
-Place each image on its own line after the relevant section header or paragraph. Use all available images where they add value to the content."""
+IMAGE PLACEMENT RULES:
+Embed each suitable image using this EXACT HTML format on its own line:
+<figure>
+  <img src="IMAGE_URL_HERE" alt="Brief description" style="width:100%; max-width:100%; border-radius:8px;" />
+  <figcaption>Image {{N}}: Title or brief description</figcaption>
+</figure>
+
+MATCHING LOGIC (follow strictly):
+- Replace IMAGE_URL_HERE with the exact URL from the image entry
+- Replace {{{{N}}}} with the image number from the list
+- Place each image immediately after the section/subsection whose topic matches the "Fits section about" hint
+- Each major section should ideally get 1-2 images that directly illustrate its content
+- The caption MUST use the actual image Content description — do NOT invent descriptions
+  based on what the surrounding paragraph says
+- SKIP an image entirely if:
+  * Its Content description is unrelated to any section (e.g., "sunset beach" in a finance report)
+  * Its Content is too generic to add value (e.g., just "Photo by photographer")
+  * All sections that match its hint already have images
+- Distribute images across DIFFERENT sections — don't cluster all images in one section
+- Image dimensions and quality tags are shown for your awareness; prefer images marked "高清" for main sections"""
     try:
         report = await create_chat_completion(
             model=cfg.smart_llm_model,

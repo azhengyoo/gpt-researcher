@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
+# 设置 HuggingFace 国内镜像，解决模型下载被墙问题
+import os
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
 from backend.server.app import app
 
 if __name__ == "__main__":

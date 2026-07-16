@@ -56,7 +56,10 @@ export const markdownToHtml = async (markdown: Compatible | string): Promise<str
     // Use dynamic import to avoid SSR issues with jsdom dependency.
     if (typeof window !== 'undefined') {
       const DOMPurify = (await import('isomorphic-dompurify')).default;
-      htmlString = DOMPurify.sanitize(htmlString, { ADD_ATTR: ['target'] });
+      htmlString = DOMPurify.sanitize(htmlString, {
+        ADD_ATTR: ['target', 'style'],  // Allow target for links and style for image sizing
+        ADD_TAGS: ['figure', 'figcaption'],  // Allow HTML5 semantic image containers
+      });
     }
 
     return htmlString;

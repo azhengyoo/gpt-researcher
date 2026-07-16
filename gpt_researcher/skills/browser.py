@@ -8,7 +8,7 @@ from gpt_researcher.utils.workers import WorkerPool
 
 from ..actions.utils import stream_output
 from ..actions.web_scraping import scrape_urls
-from ..scraper.utils import get_image_hash
+from ..scraper.utils import get_image_hash, normalize_image_url
 
 
 class BrowserManager:
@@ -95,21 +95,33 @@ class BrowserManager:
             list[str]: list of selected image URLs.
         """
         unique_images = []
-        seen_hashes = set()
+        seen_keys = set()  # Track both hash and normalized URL
         current_research_images = self.researcher.get_research_images()
+        # Pre-compute normalized URLs for existing images
+        existing_norm_urls = {normalize_image_url(u) for u in current_research_images}
 
         # Process images in descending order of their scores
         for img in sorted(images, key=lambda im: im["score"], reverse=True):
-            img_hash = get_image_hash(img['url'])
-            if (
-                img_hash
-                and img_hash not in seen_hashes
-                and img['url'] not in current_research_images
-            ):
-                seen_hashes.add(img_hash)
-                unique_images.append(img["url"])
+            img_url = img['url']
+            norm_url = normalize_image_url(img_url)
+            img_hash = get_image_hash(img_url)
 
-                if len(unique_images) == k:
-                    break
+            # Dedup: check by normalized URL first (catches http/https, param differences)
+            if norm_url in seen_keys or norm_url in existing_norm_urls:
+                continue
+
+            # Also check by hash (catches different filenames for same image)
+            if img_hash and img_hash in seen_keys:
+                continue
+
+            if img_hash:
+                seen_keys.add(img_hash)
+            seen_keys.add(norm_url)
+            seen_keys.add(img_url)  # Also track raw URL
+
+            unique_images.append(img_url)
+
+            if len(unique_images) == k:
+                break
 
         return unique_images

@@ -55,4 +55,14 @@ DEFAULT_CONFIG: BaseConfig = {
     "IMAGE_GENERATION_ENABLED": False,  # Master switch for inline image generation
     "IMAGE_GENERATION_STYLE": "dark",  # Image style: "dark" (matches app theme), "light", or "auto"
     "IMAGE_GENERATION_PROVIDER": "google",  # Image provider: "google" or "modelslab"
+    # Image search settings (high-quality stock/web photos for embedding in reports)
+    # Sources can be combined with comma: "pexels,unsplash,tavily"
+    #   - "pexels": Curated stock photos, diverse styles (needs PEXELS_API_KEY)
+    #   - "unsplash": 4K professional photos (needs UNSPLASH_ACCESS_KEY)
+    #   - "tavily": Web image search (needs TAVILY_API_KEY)
+    # Leave empty ("") to disable dedicated image search (fall back to page scraping).
+    "IMAGE_SEARCH_SOURCES": "pexels,unsplash,tavily",
+    "IMAGE_SEARCH_MAX_IMAGES": 5,  # Max images per source
+    "IMAGE_SEARCH_MIN_WIDTH": 1920,  # Minimum image width (pixels), 1920 = Full HD+
+    "IMAGE_SEARCH_ORIENTATION": "landscape",  # "landscape", "portrait", or "all"
 }

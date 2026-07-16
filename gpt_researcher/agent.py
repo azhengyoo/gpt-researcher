@@ -7,6 +7,7 @@ autonomous research and report generation using LLMs and web search.
 import asyncio
 import json
 import os
+import re
 from typing import Any, Optional
 
 from .actions import (
@@ -16,6 +17,7 @@ from .actions import (
     extract_sections,
     get_retrievers,
     get_search_results,
+    stream_output,
     table_of_contents,
 )
 from .config import Config
@@ -31,6 +33,8 @@ from .skills.researcher import ResearchConductor
 from .skills.writer import ReportGenerator
 from .utils.enum import ReportSource, ReportType, Tone
 from .utils.llm import create_chat_completion
+from .scraper.utils import normalize_image_url
+from .skills.image_search import merge_research_images, search_quality_images
 from .vector_store import VectorStoreWrapper
 
 
@@ -150,6 +154,7 @@ class GPTResearcher:
         self.query_domains = query_domains or []
         self.research_sources = []  # The list of scraped sources including title, content and images
         self.research_images = []  # The list of selected research images
+        self._search_image_metadata: dict[str, dict] = {}  # URL -> metadata for dedicated image search results
         self.documents = documents
         self.vector_store = VectorStoreWrapper(vector_store) if vector_store else None
         self.vector_store_filter = vector_store_filter
@@ -383,6 +388,98 @@ class GPTResearcher:
             "context_length": len(self.context)
         })
         
+        # ----- Dedicated high-quality image search (Unsplash, Pexels, etc.) -----
+        # Scraped images from web pages are often low-res thumbnails (300-600px)
+        # that look blurry when CSS stretches them to 100% width. Search images
+        # from Pexels/Unsplash are guaranteed ≥2MP original quality.
+        #
+        # To balance quality AND relevance, we extract specific subtopics from
+        # the research context and search each one separately — this produces
+        # more targeted results than a single broad query.
+        image_sources = getattr(self.cfg, 'image_search_sources', '') or ''
+        if image_sources.strip() and not (self.image_generator and self.image_generator.is_enabled()):
+            try:
+                # Build a Tavily image search callback if tavily is in the sources list
+                async def _tavily_image_search(query: str, max_results: int = 5) -> list[dict]:
+                    from .retrievers.tavily.tavily_search import TavilySearch
+                    tav = TavilySearch(query, headers=self.headers)
+                    _, images = tav.search(max_results=max_results, include_images=True)
+                    return images
+
+                # Extract focused image-search queries from research context.
+                # Uses LLM to generate English visual-subject keywords optimized
+                # for stock photo APIs (Pexels/Unsplash have English metadata).
+                # This is much more effective than raw Chinese section headings.
+                image_queries = await _extract_image_search_queries(
+                    self.query, self.context, self.cfg, max_queries=10,
+                )
+                if self.verbose:
+                    await stream_output(
+                        "logs",
+                        "image_search_queries",
+                        f"📸 高清图片搜索子主题 ({len(image_queries)}个): {', '.join(image_queries[:10])}",
+                        self.websocket,
+                    )
+
+                # Search all queries in parallel, track query→image mapping
+                all_search_images = []
+                seen_img_urls = set()
+                tasks = [
+                    search_quality_images(q, self.cfg, _tavily_image_search)
+                    for q in image_queries
+                ]
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+                for i, result in enumerate(batch_results):
+                    if isinstance(result, Exception):
+                        continue
+                    if result:
+                        search_query = image_queries[i] if i < len(image_queries) else ""
+                        for img in result:
+                            if img['url'] not in seen_img_urls:
+                                seen_img_urls.add(img['url'])
+                                # Tag image with the search query that found it,
+                                # so section_hint can be derived later
+                                img['_search_query'] = search_query
+                                all_search_images.append(img)
+
+                if all_search_images:
+                    # Filter images to those whose description/title actually
+                    # matches the research topic. This prevents generic sunsets/
+                    # landscapes from being embedded in unrelated sections.
+                    from ..skills.image_search import filter_relevant_images
+                    relevant_images = filter_relevant_images(
+                        all_search_images, image_queries, min_overlap=1
+                    )
+                    if not relevant_images:
+                        relevant_images = all_search_images
+
+                    # Preserve metadata so the report writer can caption the
+                    # image based on what it actually shows, not the section text.
+                    for img in relevant_images:
+                        self._search_image_metadata[img['url']] = img
+
+                    # Prepend search images: they're guaranteed high-quality
+                    # (≥2MP from Pexels/Unsplash, filtered by API). Scraped
+                    # images follow as fillers if needed.
+                    search_urls = [img['url'] for img in relevant_images]
+                    self.research_images = search_urls + self.research_images
+                    if self.verbose:
+                        await stream_output(
+                            "logs",
+                            "image_search_results",
+                            f"📸 高清图片搜索完成: {len(all_search_images)} 张 (Pexels/Unsplash/Tavily) "
+                            f"| 搜索子主题数: {len(image_queries)}",
+                            self.websocket,
+                        )
+            except Exception as e:
+                if self.verbose:
+                    await stream_output(
+                        "logs",
+                        "image_search_error",
+                        f"⚠️ 高清图片搜索失败 (将使用网页抓取图片): {e}",
+                        self.websocket,
+                    )
+        
         # Pre-generate images if enabled (happens BEFORE report writing for better UX)
         self.available_images = []
         if self.image_generator and self.image_generator.is_enabled():
@@ -397,6 +494,16 @@ class GPTResearcher:
             await self._log_event("research", step="images_pre_generated", details={
                 "images_count": len(self.available_images)
             })
+        else:
+            # 没有 AI 图片生成时，使用网页抓取到的图片嵌入报告
+            self.available_images = self._prepare_web_images_for_report()
+            if self.available_images and self.verbose:
+                await stream_output(
+                    "logs",
+                    "web_images_ready",
+                    f"🖼️ 已收集 {len(self.available_images)} 张网页图片用于嵌入报告",
+                    self.websocket,
+                )
         
         return self.context
 
@@ -669,6 +776,128 @@ class GPTResearcher:
         """
         self.research_images.extend(images)
 
+    def _prepare_web_images_for_report(self) -> list[dict[str, Any]]:
+        """将网页抓取到的图片转换为报告可嵌入的格式。
+        
+        从 self.research_images（爬虫收集的图片 URL 列表）和 
+        self.research_sources（包含标题的源数据）中构建可供 
+        report writer 使用的 available_images 格式。
+        
+        Returns:
+            List of image dicts with url, title, alt_text, section_hint, 
+            dimensions, quality keys.
+        """
+        available = []
+        seen_keys = set()  # Using (normalized_url, domain+filename) for robust dedup
+
+        # 构建 URL -> source title 的映射
+        source_title_map = {}
+        for source in self.research_sources:
+            src_url = source.get("url", "")
+            src_title = source.get("title", "")
+            if src_url and src_title:
+                source_title_map[src_url] = src_title
+
+        # 过滤掉明显不适合嵌入的图片（SVG图标、占位图、base64小图等）
+        def _is_valid_image(url: str) -> bool:
+            if not url:
+                return False
+            url_lower = url.lower()
+            # 排除常见的小图标和占位图
+            skip_patterns = [
+                "favicon", "icon-", "-icon", "logo-", "-logo",
+                "placeholder", "1x1", "pixel", "spacer", "blank",
+                ".svg",  # SVG 通常是图标，不适合作为内容插图
+                "data:image/svg",
+            ]
+            for pattern in skip_patterns:
+                if pattern in url_lower:
+                    return False
+            # 只接受可识别的图片格式
+            valid_extensions = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp")
+            # 也接受无扩展名但从CDN来的图片
+            if any(ext in url_lower for ext in valid_extensions) or any(
+                domain in url_lower for domain in ["wp.com", "wordpress.com", "cloudinary.com", "imgur.com"]
+            ):
+                return True
+            return True  # 不确定的情况下允许通过
+
+        # 生成去重键：标准化URL + 域名+文件名组合
+        def _dedup_key(img_url: str) -> tuple[str, str]:
+            from urllib.parse import urlparse as _urlparse
+            normalized = normalize_image_url(img_url)
+            # 二级键：域名+文件名最后一段，防止同一图片不同CDN URL
+            try:
+                parsed = _urlparse(img_url)
+                filename = parsed.path.rstrip('/').split('/')[-1] if parsed.path else ''
+                domain_key = f"{parsed.netloc}/{filename}" if filename else normalized
+            except Exception:
+                domain_key = normalized
+            return (normalized, domain_key)
+
+        # 取前 10 张有效且不重复的图片用于嵌入报告（给LLM更多选择）
+        # 只使用搜索图片，爬虫图片不再作为内容图（避免无关/低质图片混进来）
+        search_image_urls = [
+            url for url in self.research_images
+            if url in self._search_image_metadata
+        ]
+        for img_url in search_image_urls:
+            if len(available) >= 10:
+                break
+            if not _is_valid_image(img_url):
+                continue
+
+            # 使用标准化URL + 域名文件名组合进行去重
+            norm_key, domain_key = _dedup_key(img_url)
+            if norm_key in seen_keys or domain_key in seen_keys:
+                continue
+            seen_keys.add(norm_key)
+            seen_keys.add(domain_key)
+
+            # 只使用搜索图片的真实描述
+            search_meta = self._search_image_metadata.get(img_url, {})
+            if not search_meta:
+                continue
+
+            matched_title = (
+                search_meta.get("description")
+                or search_meta.get("title")
+                or ""
+            )
+
+            # 丢弃没有有效描述的图片（如描述为空、只有作者名、或太泛）
+            if not matched_title or _is_generic_description(matched_title):
+                continue
+
+            # 使用真实来源补充信息
+            source = search_meta.get("source", "")
+            if source:
+                matched_title = matched_title.strip()
+
+            # —— 生成精准的 section_hint ——
+            # 优先级: 搜索查询 > 描述关键词 > "General"
+            search_query = search_meta.get('_search_query', '')
+            section_hint = _derive_section_hint(matched_title, search_query)
+
+            alt_text = f"插图: {matched_title}"
+
+            # Build rich metadata for report writer
+            img_entry = {
+                "url": img_url,
+                "title": matched_title,
+                "alt_text": alt_text,
+                "section_hint": section_hint,
+            }
+            # Add dimension info if available from search metadata
+            if search_meta.get("width") and search_meta.get("height"):
+                img_entry["dimensions"] = f"{search_meta['width']}x{search_meta['height']}"
+            if source:
+                img_entry["quality"] = "高清" if source in ("pexels", "unsplash") else "标准"
+
+            available.append(img_entry)
+        
+        return available
+
     def get_research_sources(self) -> list[dict[str, Any]]:
         """Get all research sources collected during research.
 
@@ -792,3 +1021,216 @@ class GPTResearcher:
                 "total_cost": self.research_costs,
                 "step_name": step,
             })
+
+
+async def _extract_image_search_queries(
+    query: str,
+    context,
+    cfg,
+    max_queries: int = 10,
+) -> list[str]:
+    """Extract visual image search queries from research context.
+
+    Uses LLM to analyze the research sections and generate short English
+    search queries optimized for stock photo APIs (Pexels, Unsplash). One
+    query is generated PER section/subtopic so that every paragraph can
+    get a relevant photo. The queries target visual subject matter
+    (aesthetics, objects, scenes, activities) rather than specific people
+    or brand names.
+
+    Args:
+        query: The original research query.
+        context: Research context (list of strings or single string).
+        cfg: Config object for LLM access.
+        max_queries: Maximum number of distinct search queries to generate.
+
+    Returns:
+        List of English image search query strings, length ≤ max_queries.
+    """
+    import re
+    from ..utils.llm import create_chat_completion as _chat_completion
+
+    context_str = "\n".join(context) if isinstance(context, list) else str(context)
+    context_str = context_str[:6000]
+
+    try:
+        prompt = (
+            f"I am researching: \"{query}\"\n\n"
+            f"Below is the research summary. Identify the key sections/paragraphs "
+            f"and for EACH one, generate a short English search phrase that would "
+            f"find a relevant stock photo on Unsplash/Pexels.\n\n"
+            f"Rules:\n"
+            f"- One query per distinct section/topic in the research.\n"
+            f"- Focus on VISUAL subjects: objects, scenes, aesthetics, activities, "
+            f"environments, fashion styles, food, technology, nature, business settings, etc.\n"
+            f"- Use concise English (1-5 words). Example: 'modern office workspace'. "
+            f"Example: 'elegant red carpet fashion'. Example: 'AI chip circuit board'.\n"
+            f"- For people/brand topics: search the visual style NOT the name "
+            f"(e.g., 'luxury fashion runway' not 'Liu Yifei').\n"
+            f"- Aim for {max_queries} queries covering all major sections.\n"
+            f"- Each line = one query. NO numbering, NO bullet points, NO explanation.\n\n"
+            f"Research summary:\n{context_str}\n\n"
+            f"Image search queries (one per line):"
+        )
+
+        response = await _chat_completion(
+            model=cfg.smart_llm_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            llm_provider=cfg.smart_llm_provider,
+            max_tokens=300,
+            llm_kwargs=cfg.llm_kwargs,
+        )
+
+        llm_queries = [
+            q.strip().lstrip('*-•·1234567890.) ')
+            for q in response.strip().split('\n')
+            if q.strip() and len(q.strip()) >= 3
+        ]
+
+        # Deduplicate and limit
+        seen = set()
+        queries = []
+        for q in llm_queries:
+            q_lower = q.lower()
+            if q_lower not in seen:
+                seen.add(q_lower)
+                queries.append(q)
+                if len(queries) >= max_queries:
+                    break
+
+        if queries:
+            return queries
+    except Exception:
+        pass  # Fall through to regex-based extraction
+
+    # Regex-based fallback when LLM is unavailable
+    queries = [query]
+    if context:
+        headings = re.findall(r'#{1,3}\s+(.+?)(?:\n|$)', context_str)
+        numbered = re.findall(
+            r'(?:^|\n)\s*(?:\d+[\.\)]\s*)([A-Z][^\n]{10,80})(?:\n|$)',
+            context_str,
+        )
+        skip = {
+            "introduction", "conclusion", "references", "summary",
+            "appendix", "abstract", "table of contents", "overview",
+            "background", "methodology", "further reading",
+            "introducción", "conclusión", "referencias", "resumen",
+        }
+        candidates = []
+        for h in headings + numbered:
+            h = h.strip()
+            if h.lower() in skip:
+                continue
+            if 5 <= len(h) <= 100:
+                candidates.append(h)
+        for candidate in candidates:
+            if len(queries) >= max_queries:
+                break
+            if not any(_similar_query(candidate, q) for q in queries):
+                queries.append(candidate)
+    return queries[:max_queries]
+
+
+def _similar_query(a: str, b: str, threshold: float = 0.7) -> bool:
+    """Check if two queries are semantically similar (simple word overlap)."""
+    # Simple word-overlap similarity
+    words_a = set(a.lower().split())
+    words_b = set(b.lower().split())
+    if not words_a or not words_b:
+        return False
+    small, large = sorted([words_a, words_b], key=len)
+    overlap = len(small & large)
+    return overlap / len(small) >= threshold
+
+
+def _is_generic_description(text: str) -> bool:
+    """Return True if the image description is too generic to be useful.
+
+    Generic descriptions like 'Pexels photo by John', 'Photo', 'Illustration'
+    or empty strings don't tell the LLM what the image actually shows, so
+    they should be discarded to avoid random/irrelevant images being placed.
+    """
+    if not text or not text.strip():
+        return True
+    text = text.strip().lower()
+
+    generic_patterns = [
+        "photo by",
+        "photography by",
+        "pexels photo",
+        "unsplash photo",
+        "tavily photo",
+        "photo on",
+        "photographer",
+        "image by",
+        "picture by",
+        "stock photo",
+        "related illustration",
+        "相关插图",
+        "插图",
+        "illustration",
+        "photo",
+        "image",
+        "picture",
+    ]
+    # Count how many meaningful words are in the description
+    meaningful_words = [
+        w for w in re.findall(r'[a-z\u4e00-\u9fff]+', text)
+        if w not in {
+            "photo", "by", "pexels", "unsplash", "tavily", "image", "of",
+            "the", "a", "an", "in", "on", "at", "and", "or", "with", "from",
+            "for", "as", "to", "is", "are", "photography", "photographer",
+            "picture", "shot", "illustration", "stock", "curated", "high",
+            "quality", "resolution", "hd", "4k", "free", "download", "相关",
+            "插图",
+        }
+    ]
+    # If description is just a generic pattern with no meaningful content, it's generic
+    if len(meaningful_words) < 2:
+        return True
+    # If the whole text matches a generic pattern closely, it's generic
+    if any(text.startswith(p) and len(meaningful_words) < 3 for p in generic_patterns):
+        return True
+    return False
+    """Derive a section placement hint from image metadata.
+
+    Uses the search query that found the image and the image's own
+    description to generate a short hint telling the report writer
+    which section/paragraph this image likely matches.
+
+    Args:
+        title: Image description/title from the API.
+        search_query: The search query that returned this image.
+
+    Returns:
+        A short section hint string (e.g. "Fashion", "Technology", "Nature").
+    """
+    import re
+
+    # Priority 1: Use the search query as the most direct hint
+    if search_query and len(search_query) >= 3:
+        # Clean up the query: remove common prefixes, capitalize words
+        hint = search_query.strip()
+        # Remove query operators sometimes added by APIs
+        hint = re.sub(r'\b(AND|OR|NOT)\b', '', hint, flags=re.IGNORECASE)
+        hint = re.sub(r'\s+', ' ', hint).strip()
+        if len(hint) <= 40:
+            return hint.title()
+        return ' '.join(w.title() for w in hint.split()[:4])
+
+    # Priority 2: Extract key visual nouns from the title
+    if title and title not in ("相关插图", "Pexels photo", "Unsplash photo"):
+        # Extract meaningful words (nouns, adjectives)
+        words = [w for w in title.lower().split()
+                 if w not in {"a", "an", "the", "of", "by", "in", "on", "at",
+                              "and", "or", "with", "from", "for", "is", "are",
+                              "photo", "image", "photography", "photographer",
+                              "pexels", "unsplash", "stock", "free"}]
+        if words:
+            hint = ' '.join(w.title() for w in words[:5])
+            if len(hint) <= 50:
+                return hint
+
+    return "General"
