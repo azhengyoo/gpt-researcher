@@ -712,11 +712,31 @@ export default function Home() {
 
   // Add a ref to track if an update is in progress to prevent infinite loops
   const isUpdatingRef = useRef(false);
+  // Throttle save/update to avoid excessive IndexedDB writes during streaming
+  const saveThrottleTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // Save or update research in history based on mode
+  // Save or update research in history based on mode (throttled)
   useEffect(() => {
-    // Define an async function inside the effect
-    const saveOrUpdateResearch = async () => {
+    // Clear any pending throttle on cleanup
+    if (saveThrottleTimerRef.current) {
+      clearTimeout(saveThrottleTimerRef.current);
+    }
+
+    // Throttle: wait for 500ms of no changes before saving, unless it's the final state
+    saveThrottleTimerRef.current = setTimeout(() => {
+      saveOrUpdateResearch();
+    }, 500);
+
+    return () => {
+      if (saveThrottleTimerRef.current) {
+        clearTimeout(saveThrottleTimerRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showResult, loading, answer, question, orderedData, history, saveResearch, updateResearch, isInChatMode, currentResearchId, getResearchById]);
+
+  // Define the actual save function (called from throttled effect)
+  const saveOrUpdateResearch = async () => {
       // Prevent infinite loops by checking if we're already updating
       if (isUpdatingRef.current) return;
       
@@ -765,10 +785,6 @@ export default function Home() {
       }
     };
     
-    // Call the async function
-    saveOrUpdateResearch();
-  }, [showResult, loading, answer, question, orderedData, history, saveResearch, updateResearch, isInChatMode, currentResearchId, getResearchById]);
-
   // Handle selecting a research from history
   const handleSelectResearch = async (id: string) => {
     try {

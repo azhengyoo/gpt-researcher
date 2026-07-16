@@ -190,7 +190,7 @@ async def handle_start_command(websocket, data: str, manager):
     )
     report = str(report)
     # Signal frontend that report content is fully loaded (decouple from file generation)
-    await websocket.send_json({"type": "report_complete"})
+    await websocket.send_json({"type": "report_complete", "output": report})
     # Notify frontend that file generation has started (prevents "stuck" feeling)
     await websocket.send_json({
         "type": "logs",
@@ -379,9 +379,7 @@ async def handle_websocket_communication(websocket, manager):
                 data = await websocket.receive_text()
                 logger.info(f"Received WebSocket message: {data[:50]}..." if len(data) > 50 else data)
                 
-                if data == "ping":
-                    await websocket.send_text("pong")
-                elif data.strip().startswith("confirmation_response"):
+                if data.strip().startswith("confirmation_response"):
                     # Handle user response to a confirmation request (can happen during running task)
                     try:
                         resp = json.loads(data.strip()[len("confirmation_response"):].strip())

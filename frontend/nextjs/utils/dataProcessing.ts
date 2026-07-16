@@ -10,6 +10,8 @@ export const preprocessOrderedData = (data: Data[]) => {
   let sourceBlockEncountered = false;
   let lastSubqueriesIndex = -1;
   const seenUrls = new Set<string>();
+  // Track source groups pushed to groupedData to avoid O(n) includes
+  const pushedSourceGroups = new WeakSet<object>();
   // console.log('websocket data before its processed',data)
 
   data.forEach((item: any) => {
@@ -26,11 +28,14 @@ export const preprocessOrderedData = (data: Data[]) => {
       currentReportGroup.content += output;
     } else if (type === 'report_complete') {
       // Replace entire report content with the complete version (includes images)
-      if (currentReportGroup) {
-        currentReportGroup.content = output;
-      } else {
-        currentReportGroup = { type: 'reportBlock', content: output };
-        groupedData.push(currentReportGroup);
+      // Only update if output is provided; otherwise keep the streamed content
+      if (output) {
+        if (currentReportGroup) {
+          currentReportGroup.content = output;
+        } else {
+          currentReportGroup = { type: 'reportBlock', content: output };
+          groupedData.push(currentReportGroup);
+        }
       }
     } else if (content === 'selected_images') {
       groupedData.push({ type: 'imagesBlock', metadata });
@@ -88,11 +93,15 @@ export const preprocessOrderedData = (data: Data[]) => {
         }
       
         // Add this block to ensure the source group is added to groupedData
-        if (currentSourceGroup.items.length > 0 && !groupedData.includes(currentSourceGroup)) {
+        if (currentSourceGroup.items.length > 0 && !pushedSourceGroups.has(currentSourceGroup)) {
           groupedData.push(currentSourceGroup);
+          pushedSourceGroups.add(currentSourceGroup);
           sourceBlockEncountered = true;
         }
-      } else if (type !== 'path' && content !== '') {
+      } else if (type === 'path') {
+      // Path message: just add it, don't delete the report block
+      groupedData.push(item);
+    } else if (content !== '') {
         if (sourceBlockEncountered) {
           if (!currentAccordionGroup) {
             currentAccordionGroup = { type: 'accordionBlock', items: [] };

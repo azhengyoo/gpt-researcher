@@ -1,22 +1,46 @@
 "use client";
-import Image from "next/image";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from "react-hot-toast";
 import { markdownToHtml } from '../../helpers/markdownHelper';
 import '../../styles/markdown.css';
-import { useResearchHistoryContext } from '../../hooks/ResearchHistoryContext';
-import { ChatMessage } from '../../types/data';
 
-export default function Report({ answer, researchId }: { answer: string, researchId?: string }) {
+export default React.memo(function Report({ answer, researchId }: { answer: string, researchId?: string }) {
     const [htmlContent, setHtmlContent] = useState('');
-    const { getChatMessages } = useResearchHistoryContext();
-    // Memoize this value to prevent re-renders
-    const chatMessages = researchId ? getChatMessages(researchId) : [];
+    // Track previous answer length to only convert delta during streaming
+    const lastConvertedLengthRef = useRef(0);
+    const debounceTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
     useEffect(() => {
-      if (answer) {
-        markdownToHtml(answer).then((html) => setHtmlContent(html));
+      if (!answer) {
+        lastConvertedLengthRef.current = 0;
+        setHtmlContent('');
+        return;
       }
+
+      // If answer jumped significantly (e.g. report_complete replaced it),
+      // or this is the first load, convert immediately
+      const lengthDiff = answer.length - lastConvertedLengthRef.current;
+      if (lastConvertedLengthRef.current === 0 || lengthDiff > 500) {
+        markdownToHtml(answer).then((html) => setHtmlContent(html));
+        lastConvertedLengthRef.current = answer.length;
+        return;
+      }
+
+      // During active streaming: debounce to avoid converting on every chunk
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+
+      debounceTimerRef.current = setTimeout(() => {
+        markdownToHtml(answer).then((html) => setHtmlContent(html));
+        lastConvertedLengthRef.current = answer.length;
+      }, 300);
+
+      return () => {
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+        }
+      };
     }, [answer]);
     
     return (
@@ -80,4 +104,4 @@ export default function Report({ answer, researchId }: { answer: string, researc
         </div>
       </div>
     );
-} 
+});

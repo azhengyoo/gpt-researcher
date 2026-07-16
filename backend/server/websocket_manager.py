@@ -40,10 +40,7 @@ class WebSocketManager:
                     break
                     
                 if websocket in self.active_connections:
-                    if message == "ping":
-                        await websocket.send_text("pong")
-                    else:
-                        await websocket.send_text(message)
+                    await websocket.send_text(message)
                 else:
                     break
             except Exception as e:

@@ -1,5 +1,5 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
-import { Data, ChatBoxSettings, QuestionData } from '../types/data';
+import { useState, useEffect, useCallback } from 'react';
+import { Data, ChatBoxSettings } from '../types/data';
 import { getHost } from '../helpers/getHost';
 
 export const useWebSocket = (
@@ -10,16 +10,10 @@ export const useWebSocket = (
   setQuestionForHuman: React.Dispatch<React.SetStateAction<boolean | true>>
 ) => {
   const [socket, setSocket] = useState<WebSocket | null>(null);
-  const heartbeatInterval = useRef<number>();
 
-  // Cleanup function for heartbeat and socket on unmount
+  // Cleanup socket on unmount
   useEffect(() => {
     return () => {
-      // Clear heartbeat interval
-      if (heartbeatInterval.current) {
-        clearInterval(heartbeatInterval.current);
-      }
-      
       // Close socket on unmount if it exists and is open
       if (socket && socket.readyState === WebSocket.OPEN) {
         console.log('Closing WebSocket due to component unmount');
@@ -27,20 +21,6 @@ export const useWebSocket = (
       }
     };
   }, [socket]);
-
-  const startHeartbeat = (ws: WebSocket) => {
-    // Clear any existing heartbeat
-    if (heartbeatInterval.current) {
-      clearInterval(heartbeatInterval.current);
-    }
-    
-    // Start new heartbeat
-    heartbeatInterval.current = window.setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send('ping');
-      }
-    }, 30000); // Send ping every 30 seconds
-  };
 
   const initializeWebSocket = useCallback((
     promptValue: string, 
@@ -95,17 +75,10 @@ export const useWebSocket = (
         } catch (error) {
           console.error("Error preparing start message:", error);
         }
-        
-        startHeartbeat(newSocket);
       };
 
       newSocket.onmessage = (event) => {
         try {
-          // Handle ping response
-          if (event.data === 'pong') return;
-
-          // Try to parse JSON data
-          console.log(`Received WebSocket message: ${event.data.substring(0, 100)}...`);
           const data = JSON.parse(event.data);
           
           if (data.type === 'error') {
@@ -121,8 +94,11 @@ export const useWebSocket = (
               setAnswer((prev: string) => prev + data.output);
             } else if (data.type === 'report_complete') {
               // Replace entire report with the complete version (includes images)
-              console.log('Received complete report with images');
-              setAnswer(data.output);
+              // Only update if output is provided; otherwise keep the streamed content
+              if (data.output) {
+                console.log('Received complete report with images');
+                setAnswer(data.output);
+              }
             } else if (data.type === 'path') {
               setLoading(false);
             }
@@ -134,17 +110,11 @@ export const useWebSocket = (
 
       newSocket.onclose = (event) => {
         console.log(`WebSocket connection closed: code=${event.code}, reason=${event.reason}`);
-        if (heartbeatInterval.current) {
-          clearInterval(heartbeatInterval.current);
-        }
         setSocket(null);
       };
 
       newSocket.onerror = (error) => {
         console.error('WebSocket error:', error);
-        if (heartbeatInterval.current) {
-          clearInterval(heartbeatInterval.current);
-        }
       };
     }
   }, [socket, setOrderedData, setAnswer, setLoading, setShowHumanFeedback, setQuestionForHuman]);

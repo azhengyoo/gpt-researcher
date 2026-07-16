@@ -1,6 +1,6 @@
 import Image from "next/image";
 import LogMessage from './elements/LogMessage';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 
 interface Log {
   header: string;
@@ -13,7 +13,7 @@ interface OrderedLogsProps {
   logs: Log[];
 }
 
-const LogsSection = ({ logs }: OrderedLogsProps) => {
+const LogsSection = memo(({ logs }: OrderedLogsProps) => {
   const logsContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,6 +39,6 @@ const LogsSection = ({ logs }: OrderedLogsProps) => {
       </div>
     </div>
   );
-};
+});
 
 export default LogsSection; 

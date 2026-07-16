@@ -2,7 +2,7 @@ import Image from "next/image";
 import React from 'react';
 import SourceCard from "./elements/SourceCard";
 
-export default function Sources({
+export default React.memo(function Sources({
   sources,
   compact = false,
 }: {
@@ -76,4 +76,4 @@ export default function Sources({
       </div>
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import Question from './ResearchBlocks/Question';
 import Report from './ResearchBlocks/Report';
 import Sources from './ResearchBlocks/Sources';
@@ -30,7 +30,7 @@ export const ResearchResults: React.FC<ResearchResultsProps> = ({
   isProcessingChat = false,
   onShareClick
 }) => {
-  const groupedData = preprocessOrderedData(orderedData);
+  const groupedData = useMemo(() => preprocessOrderedData(orderedData), [orderedData]);
   const pathData = groupedData.find(data => data.type === 'path');
   const initialQuestion = groupedData.find(data => data.type === 'question');
 
