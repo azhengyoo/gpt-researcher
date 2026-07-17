@@ -4,11 +4,15 @@ This module provides the BrowserManager class that handles web scraping
 and content extraction from URLs.
 """
 
+import logging
+
 from gpt_researcher.utils.workers import WorkerPool
 
 from ..actions.utils import stream_output
 from ..actions.web_scraping import scrape_urls
 from ..scraper.utils import get_image_hash, normalize_image_url
+
+logger = logging.getLogger(__name__)
 
 
 class BrowserManager:
@@ -28,6 +32,7 @@ class BrowserManager:
         Args:
             researcher: The GPTResearcher instance that owns this manager.
         """
+        logger.info("▶ BrowserManager.__init__ — 初始化浏览器管理器 | 入参: researcher=%s", researcher)
         self.researcher = researcher
         self.worker_pool = WorkerPool(
             researcher.cfg.max_scraper_workers,
@@ -44,6 +49,7 @@ class BrowserManager:
         Returns:
             list[dict]: list of scraped content results.
         """
+        logger.info("▶ BrowserManager.browse_urls — 浏览多个URL获取内容 | 入参: urls数量=%d", len(urls))
         if self.researcher.verbose:
             await stream_output(
                 "logs",
@@ -94,6 +100,7 @@ class BrowserManager:
         Returns:
             list[str]: list of selected image URLs.
         """
+        logger.info("▶ BrowserManager.select_top_images — 选择最佳图片并去重 | 入参: images数量=%d, k=%d", len(images), k)
         unique_images = []
         seen_keys = set()  # Track both hash and normalized URL
         current_research_images = self.researcher.get_research_images()

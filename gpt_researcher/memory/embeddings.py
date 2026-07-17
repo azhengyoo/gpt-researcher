@@ -89,21 +89,26 @@ class Memory:
             case "custom":
                 from langchain_openai import OpenAIEmbeddings
 
+                # EMBEDDING_BASE_URL takes precedence over OPENAI_BASE_URL,
+                # allowing embeddings to use a different endpoint than the LLM.
+                _embedding_base = os.getenv("EMBEDDING_BASE_URL") or os.getenv("OPENAI_BASE_URL", "http://localhost:1234/v1")
+
                 _embeddings = OpenAIEmbeddings(
                     model=model,
                     openai_api_key=os.getenv("OPENAI_API_KEY", "custom"),
-                    openai_api_base=os.getenv(
-                        "OPENAI_BASE_URL", "http://localhost:1234/v1"
-                    ),  # default for lmstudio
+                    openai_api_base=_embedding_base,
                     check_embedding_ctx_length=False,
                     **embedding_kwargs,
                 )  # quick fix for lmstudio
             case "openai":
                 from langchain_openai import OpenAIEmbeddings
 
-                # Support custom OpenAI-compatible APIs via OPENAI_BASE_URL
-                if "openai_api_base" not in embedding_kwargs and os.environ.get("OPENAI_BASE_URL"):
-                    embedding_kwargs["openai_api_base"] = os.environ["OPENAI_BASE_URL"]
+                # EMBEDDING_BASE_URL takes precedence; falls back to OPENAI_BASE_URL
+                # for backward compatibility with existing setups.
+                if "openai_api_base" not in embedding_kwargs:
+                    _embedding_base = os.getenv("EMBEDDING_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
+                    if _embedding_base:
+                        embedding_kwargs["openai_api_base"] = _embedding_base
 
                 _embeddings = OpenAIEmbeddings(model=model, **embedding_kwargs)
             case "azure_openai":

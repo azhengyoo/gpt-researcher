@@ -1,11 +1,14 @@
 import asyncio
 import hashlib
+import logging
 import os
 import time
 from typing import List, Dict, Set, Optional, Any
 from fastapi import WebSocket
 
 from gpt_researcher import GPTResearcher
+
+logger = logging.getLogger(__name__)
 
 
 class DetailedReport:
@@ -28,6 +31,7 @@ class DetailedReport:
         max_search_results=None,
         doc_path="",
     ):
+        logger.info("▶ DetailedReport.__init__ — 初始化详细报告生成器 | 入参: query=%s, report_type=%s", query, report_type)
         self.query = query
         self.report_type = report_type
         self.report_source = report_source
@@ -86,11 +90,13 @@ class DetailedReport:
 
     def _generate_research_id(self, query: str) -> str:
         """Generate a unique research ID from query and timestamp."""
+        logger.info("▶ DetailedReport._generate_research_id — 生成唯一研究ID | 入参: query=%s", query)
         timestamp = str(int(time.time()))
         query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
         return f"detailed_{timestamp}_{query_hash}"
 
     async def run(self) -> str:
+        logger.info("▶ DetailedReport.run — 执行详细报告的研究和生成流程")
         await self._initial_research()
         subtopics = await self._get_all_subtopics()
         report_introduction = await self.gpt_researcher.write_introduction()
@@ -100,11 +106,13 @@ class DetailedReport:
         return report
 
     async def _initial_research(self) -> None:
+        logger.info("▶ DetailedReport._initial_research — 执行初始研究")
         await self.gpt_researcher.conduct_research()
         self.global_context = self.gpt_researcher.context
         self.global_urls = self.gpt_researcher.visited_urls
 
     async def _get_all_subtopics(self) -> List[Dict]:
+        logger.info("▶ DetailedReport._get_all_subtopics — 获取所有子主题")
         subtopics_data = await self.gpt_researcher.get_subtopics()
 
         all_subtopics = []
@@ -117,6 +125,7 @@ class DetailedReport:
         return all_subtopics
 
     async def _generate_subtopic_reports(self, subtopics: List[Dict]) -> tuple:
+        logger.info("▶ DetailedReport._generate_subtopic_reports — 生成子主题报告 | 入参: subtopics_count=%d", len(subtopics))
         subtopic_reports = []
         subtopics_report_body = ""
 
@@ -129,6 +138,7 @@ class DetailedReport:
         return subtopic_reports, subtopics_report_body
 
     def _hashable_context(self, input_context: List[str] | List[dict]):
+        logger.info("▶ DetailedReport._hashable_context — 将上下文转换为可哈希的字符串列表 | 入参: item_count=%d", len(input_context))
         # Convert context to strings to ensure hashability (handle both strings and dicts from MCP)
         context_items = []
         
@@ -146,6 +156,7 @@ class DetailedReport:
 
     async def _get_subtopic_report(self, subtopic: Dict) -> Dict[str, str]:
         current_subtopic_task = subtopic.get("task")
+        logger.info("▶ DetailedReport._get_subtopic_report — 获取单个子主题报告 | 入参: subtopic_task=%s", current_subtopic_task)
         subtopic_assistant = GPTResearcher(
             query=current_subtopic_task,
             query_domains=self.query_domains,
@@ -204,6 +215,7 @@ class DetailedReport:
         return {"topic": subtopic, "report": subtopic_report}
 
     async def _construct_detailed_report(self, introduction: str, report_body: str) -> str:
+        logger.info("▶ DetailedReport._construct_detailed_report — 构建完整详细报告")
         toc = self.gpt_researcher.table_of_contents(report_body)
         conclusion = await self.gpt_researcher.write_report_conclusion(report_body)
         conclusion_with_references = self.gpt_researcher.add_references(

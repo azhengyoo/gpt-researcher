@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from gpt_researcher.utils.logging_config import RelativePathFormatter
+
 class JSONResearchHandler:
     def __init__(self, json_file):
         self.json_file = json_file
@@ -64,7 +66,7 @@ def setup_research_logging():
     
     # Add stream handler for console output
     console_handler = logging.StreamHandler()
-    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    console_handler.setFormatter(RelativePathFormatter('%(asctime)s - %(relative_path)s:%(lineno)d - %(levelname)s - %(message)s'))
     research_logger.addHandler(console_handler)
     
     # Prevent propagation to root logger to avoid duplicate logs

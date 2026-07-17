@@ -1,5 +1,6 @@
 from datetime import datetime
 import asyncio
+import logging
 from typing import Any, Dict, List, Optional
 
 from langgraph.graph import StateGraph, END
@@ -9,11 +10,14 @@ from .utils.llms import call_model
 from ..memory.draft import DraftState
 from . import ResearchAgent, ReviewerAgent, ReviserAgent
 
+logger = logging.getLogger(__name__)
+
 
 class EditorAgent:
     """Agent responsible for editing and managing code."""
 
     def __init__(self, websocket=None, stream_output=None, tone=None, headers=None):
+        logger.info("▶ EditorAgent.__init__ — 初始化编辑器agent")
         self.websocket = websocket
         self.stream_output = stream_output
         self.tone = tone
@@ -26,6 +30,7 @@ class EditorAgent:
         :param research_state: Dictionary containing research state information
         :return: Dictionary with title, date, and planned sections
         """
+        logger.info("▶ EditorAgent.plan_research — 基于初始研究规划研究大纲")
         initial_research = research_state.get("initial_research")
         task = research_state.get("task")
         include_human_feedback = task.get("include_human_feedback")
@@ -56,6 +61,7 @@ class EditorAgent:
         :param research_state: Dictionary containing research state information
         :return: Dictionary with research results
         """
+        logger.info("▶ EditorAgent.run_parallel_research — 运行并行研究任务")
         agents = self._initialize_agents()
         workflow = self._create_workflow()
         chain = workflow.compile()
@@ -79,6 +85,7 @@ class EditorAgent:
     def _create_planning_prompt(self, initial_research: str, include_human_feedback: bool,
                                 human_feedback: Optional[str], max_sections: int) -> List[Dict[str, str]]:
         """Create the prompt for research planning."""
+        logger.info("▶ EditorAgent._create_planning_prompt — 创建研究规划提示词 | 入参: max_sections=%d", max_sections)
         return [
             {
                 "role": "system",
@@ -96,6 +103,7 @@ class EditorAgent:
     def _format_planning_instructions(self, initial_research: str, include_human_feedback: bool,
                                       human_feedback: Optional[str], max_sections: int) -> str:
         """Format the instructions for research planning."""
+        logger.info("▶ EditorAgent._format_planning_instructions — 格式化研究规划指令 | 入参: max_sections=%d", max_sections)
         today = datetime.now().strftime('%d/%m/%Y')
         feedback_instruction = (
             f"Human feedback: {human_feedback}. You must plan the sections based on the human feedback."
@@ -117,6 +125,7 @@ class EditorAgent:
 
     def _initialize_agents(self) -> Dict[str, Any]:
         """Initialize the research, reviewer, and reviser skills."""
+        logger.info("▶ EditorAgent._initialize_agents — 初始化研究、审阅和修订agent")
         return {
             "research": ResearchAgent(self.websocket, self.stream_output, self.tone, self.headers),
             "reviewer": ReviewerAgent(self.websocket, self.stream_output, self.headers),
@@ -125,6 +134,7 @@ class EditorAgent:
 
     def _create_workflow(self) -> StateGraph:
         """Create the workflow for the research process."""
+        logger.info("▶ EditorAgent._create_workflow — 创建研究工作流")
         agents = self._initialize_agents()
         workflow = StateGraph(DraftState)
 
@@ -145,6 +155,7 @@ class EditorAgent:
 
     def _log_parallel_research(self, queries: List[str]) -> None:
         """Log the start of parallel research tasks."""
+        logger.info("▶ EditorAgent._log_parallel_research — 记录并行研究任务启动 | 入参: query_count=%d", len(queries))
         if self.websocket and self.stream_output:
             asyncio.create_task(self.stream_output(
                 "logs",
@@ -160,6 +171,7 @@ class EditorAgent:
 
     def _create_task_input(self, research_state: Dict[str, Any], query: str, title: str) -> Dict[str, Any]:
         """Create the input for a single research task."""
+        logger.info("▶ EditorAgent._create_task_input — 创建单个研究任务输入 | 入参: query=%s", query)
         return {
             "task": research_state.get("task"),
             "topic": query,

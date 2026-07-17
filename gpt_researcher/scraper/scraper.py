@@ -8,7 +8,6 @@ import asyncio
 import importlib
 import logging
 import subprocess
-import sys
 from urllib.parse import urlparse
 
 import requests
@@ -39,6 +38,8 @@ class Scraper:
         Args:
             urls: List of URLs to scrape (duplicates will be removed)
         """
+        logger = logging.getLogger(__name__)
+        logger.info("▶ Scraper.__init__ — 初始化抓取器 | 入参: urls数量=%d", len(urls))
         # Optimization: Remove duplicate URLs to avoid redundant scraping
         unique_urls = list(dict.fromkeys(urls))  # Preserves order while removing duplicates
         duplicates_removed = len(urls) - len(unique_urls)
@@ -65,6 +66,7 @@ class Scraper:
         """
         Extracts the content from the links
         """
+        self.logger.info("▶ Scraper.run — 执行网页抓取任务")
         contents = await asyncio.gather(
             *(self.extract_data_from_url(url, self.session) for url in self.urls)
         )
@@ -78,6 +80,7 @@ class Scraper:
         dependencies beyond requirements.txt. When adding a new scraper to the repo, update `pkg_map`
         with its required information and call check_pkg() during initialization.
         """
+        self.logger.info("▶ Scraper._check_pkg — 检查并确保抓取器依赖包可用 | 入参: scrapper_name=%s", scrapper_name)
         pkg_map = {
             "tavily_extract": {
                 "package_installation_name": "tavily-python",
@@ -110,6 +113,7 @@ class Scraper:
         """
         Extracts the data from the link with logging
         """
+        self.logger.info("▶ Scraper.extract_data_from_url — 从URL提取数据 | 入参: link=%s", link)
         async with self.worker_pool.throttle():
             try:
                 Scraper = self.get_scraper(link)
@@ -185,6 +189,7 @@ class Scraper:
         in the `SCRAPER_CLASSES` dictionary. If the link ends with ".pdf", it selects the
         `PyMuPDFScraper` class. If the link contains "arxiv.org", it selects the `ArxivScraper
         """
+        self.logger.info("▶ Scraper.get_scraper — 根据链接选择抓取器类 | 入参: link=%s", link)
 
         SCRAPER_CLASSES = {
             "pdf": PyMuPDFScraper,

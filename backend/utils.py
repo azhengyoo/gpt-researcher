@@ -2,6 +2,7 @@ import aiofiles
 import urllib
 import mistune
 import os
+import sys
 
 async def write_to_file(filename: str, text: str) -> None:
     """Asynchronously write text to a file in UTF-8 encoding.

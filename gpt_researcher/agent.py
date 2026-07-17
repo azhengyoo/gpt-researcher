@@ -6,9 +6,13 @@ autonomous research and report generation using LLMs and web search.
 
 import asyncio
 import json
+import logging
 import os
 import re
+import sys
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from .actions import (
     add_references,
@@ -139,6 +143,7 @@ class GPTResearcher:
                 - "deep": Run MCP for all sub-queries for maximum thoroughness  
                 - "disabled": Skip MCP entirely, use only web retrievers
         """
+        logger.info("▶ GPTResearcher.__init__ — 初始化研究agent | 入参: query=%s, report_type=%s, report_format=%s, report_source=%s, tone=%s, max_subtopics=%d", query, report_type, report_format, report_source, tone, max_subtopics)
         self.kwargs = kwargs
         self.query = query
         self.report_type = report_type
@@ -211,6 +216,7 @@ class GPTResearcher:
         Returns:
             A unique string identifier for this research session.
         """
+        logger.info("▶ GPTResearcher._generate_research_id — 生成唯一研究会话ID")
         if not self._research_id:
             import hashlib
             import time
@@ -236,6 +242,7 @@ class GPTResearcher:
         Returns:
             str: Resolved strategy ("fast", "deep", or "disabled")
         """
+        logger.info("▶ GPTResearcher._resolve_mcp_strategy — 解析MCP策略（含向后兼容） | 入参: mcp_strategy=%s, mcp_max_iterations=%s", mcp_strategy, mcp_max_iterations)
         # Priority 1: Use mcp_strategy parameter if provided
         if mcp_strategy is not None:
             # Support new strategy names
@@ -297,6 +304,7 @@ class GPTResearcher:
         Args:
             mcp_configs (list[dict]): List of MCP server configuration dictionaries.
         """
+        logger.info("▶ GPTResearcher._process_mcp_configs — 处理MCP配置 | 入参: mcp_configs数量=%d", len(mcp_configs))
         # Add MCP to retrievers via cfg (not os.environ) to avoid env pollution.
         if hasattr(self.cfg, 'retrievers') and self.cfg.retrievers:
             current_retrievers = (
@@ -315,6 +323,7 @@ class GPTResearcher:
 
     async def _log_event(self, event_type: str, **kwargs):
         """Helper method to handle logging events"""
+        logger.info("▶ GPTResearcher._log_event — 记录事件 | 入参: event_type=%s", event_type)
         if self.log_handler:
             try:
                 if event_type == "tool":
@@ -345,6 +354,7 @@ class GPTResearcher:
         Returns:
             The accumulated research context.
         """
+        logger.info("▶ GPTResearcher.conduct_research — 执行整个研究流程：搜索、爬取、压缩、生成报告")
         await self._log_event("research", step="start", details={
             "query": self.query,
             "report_type": self.report_type,
@@ -522,6 +532,7 @@ class GPTResearcher:
         Returns:
             The accumulated research context from deep research.
         """
+        logger.info("▶ GPTResearcher._handle_deep_research — 执行深度研究并记录日志")
         # Log deep research configuration
         await self._log_event("research", step="deep_research_initialize", details={
             "type": "deep_research",
@@ -579,6 +590,7 @@ class GPTResearcher:
         Returns:
             The generated report as a string.
         """
+        logger.info("▶ GPTResearcher.write_report — 根据收集的上下文生成研究报告 | 入参: ext_context=%s, custom_prompt=%s", ext_context is not None, custom_prompt)
         # Use pre-generated images if available (generated during conduct_research)
         has_available_images = bool(self.available_images)
         
@@ -613,6 +625,7 @@ class GPTResearcher:
         Returns:
             The generated conclusion text.
         """
+        logger.info("▶ GPTResearcher.write_report_conclusion — 撰写报告的结论部分 | 入参: report_body长度=%d", len(report_body) if report_body else 0)
         await self._log_event("research", step="writing_conclusion")
         conclusion = await self.report_generator.write_report_conclusion(report_body)
         await self._log_event("research", step="conclusion_completed")
@@ -624,6 +637,7 @@ class GPTResearcher:
         Returns:
             The generated introduction text.
         """
+        logger.info("▶ GPTResearcher.write_introduction — 撰写报告的引言部分")
         await self._log_event("research", step="writing_introduction")
         intro = await self.report_generator.write_introduction()
         await self._log_event("research", step="introduction_completed")
@@ -649,6 +663,7 @@ class GPTResearcher:
         Returns:
             List of search results or a synthesized summary string.
         """
+        logger.info("▶ GPTResearcher.quick_search — 执行快速搜索（不运行完整研究流程） | 入参: query=%s, aggregated_summary=%s, all_retrievers=%s", query, aggregated_summary, all_retrievers)
         if all_retrievers and len(self.retrievers) > 1:
             search_results = await self._search_all_retrievers(query, query_domains)
         else:
@@ -698,6 +713,7 @@ class GPTResearcher:
         Returns:
             A merged, de-duplicated list of search results.
         """
+        logger.info("▶ GPTResearcher._search_all_retrievers — 并发查询所有检索器并合并去重结果 | 入参: query=%s", query)
         tasks = [
             get_search_results(query, retriever, query_domains=query_domains, researcher=self)
             for retriever in self.retrievers
@@ -724,6 +740,7 @@ class GPTResearcher:
         Returns:
             List of generated subtopics.
         """
+        logger.info("▶ GPTResearcher.get_subtopics — 为研究查询生成子主题列表")
         return await self.report_generator.get_subtopics()
 
     async def get_draft_section_titles(self, current_subtopic: str) -> list[str]:
@@ -735,6 +752,7 @@ class GPTResearcher:
         Returns:
             List of section title strings.
         """
+        logger.info("▶ GPTResearcher.get_draft_section_titles — 为子主题生成草稿章节标题 | 入参: current_subtopic=%s", current_subtopic)
         return await self.report_generator.get_draft_section_titles(current_subtopic)
 
     async def get_similar_written_contents_by_draft_section_titles(
@@ -755,6 +773,7 @@ class GPTResearcher:
         Returns:
             List of similar content strings.
         """
+        logger.info("▶ GPTResearcher.get_similar_written_contents_by_draft_section_titles — 根据章节标题查找相似的已写内容 | 入参: current_subtopic=%s, max_results=%d", current_subtopic, max_results)
         return await self.context_manager.get_similar_written_contents_by_draft_section_titles(
             current_subtopic,
             draft_section_titles,
@@ -772,6 +791,7 @@ class GPTResearcher:
         Returns:
             List of image dictionaries.
         """
+        logger.info("▶ GPTResearcher.get_research_images — 获取研究过程中收集的图片 | 入参: top_k=%d", top_k)
         return self.research_images[:top_k]
 
     def add_research_images(self, images: list[dict[str, Any]]) -> None:
@@ -780,6 +800,7 @@ class GPTResearcher:
         Args:
             images: List of image dictionaries to add.
         """
+        logger.info("▶ GPTResearcher.add_research_images — 向研究图片集合中添加图片 | 入参: images数量=%d", len(images))
         self.research_images.extend(images)
 
     def _prepare_web_images_for_report(self) -> list[dict[str, Any]]:
@@ -793,6 +814,7 @@ class GPTResearcher:
             List of image dicts with url, title, alt_text, section_hint, 
             dimensions, quality keys.
         """
+        logger.info("▶ GPTResearcher._prepare_web_images_for_report — 将网页抓取图片转换为报告可嵌入格式")
         available = []
         seen_keys = set()  # Using (normalized_url, domain+filename) for robust dedup
 
@@ -910,6 +932,7 @@ class GPTResearcher:
         Returns:
             List of source dictionaries containing title, content, and images.
         """
+        logger.info("▶ GPTResearcher.get_research_sources — 获取研究过程中收集的所有来源")
         return self.research_sources
 
     def add_research_sources(self, sources: list[dict[str, Any]]) -> None:
@@ -918,6 +941,7 @@ class GPTResearcher:
         Args:
             sources: List of source dictionaries to add.
         """
+        logger.info("▶ GPTResearcher.add_research_sources — 向研究来源集合中添加来源 | 入参: sources数量=%d", len(sources))
         self.research_sources.extend(sources)
 
     def add_references(self, report_markdown: str, visited_urls: set) -> str:
@@ -930,6 +954,7 @@ class GPTResearcher:
         Returns:
             The report with references appended.
         """
+        logger.info("▶ GPTResearcher.add_references — 为报告添加参考文献部分 | 入参: visited_urls数量=%d", len(visited_urls))
         return add_references(report_markdown, visited_urls)
 
     def extract_headers(self, markdown_text: str) -> list[dict]:
@@ -941,6 +966,7 @@ class GPTResearcher:
         Returns:
             List of header dictionaries.
         """
+        logger.info("▶ GPTResearcher.extract_headers — 从Markdown文本中提取标题")
         return extract_headers(markdown_text)
 
     def extract_sections(self, markdown_text: str) -> list[dict]:
@@ -952,6 +978,7 @@ class GPTResearcher:
         Returns:
             List of section dictionaries.
         """
+        logger.info("▶ GPTResearcher.extract_sections — 从Markdown文本中提取章节")
         return extract_sections(markdown_text)
 
     def table_of_contents(self, markdown_text: str) -> str:
@@ -963,6 +990,7 @@ class GPTResearcher:
         Returns:
             The table of contents as markdown string.
         """
+        logger.info("▶ GPTResearcher.table_of_contents — 为Markdown文本生成目录")
         return table_of_contents(markdown_text)
 
     def get_source_urls(self) -> list:
@@ -971,6 +999,7 @@ class GPTResearcher:
         Returns:
             List of visited URL strings.
         """
+        logger.info("▶ GPTResearcher.get_source_urls — 获取所有已访问的源URL")
         return list(self.visited_urls)
 
     def get_research_context(self) -> list:
@@ -979,6 +1008,7 @@ class GPTResearcher:
         Returns:
             List of context items collected during research.
         """
+        logger.info("▶ GPTResearcher.get_research_context — 获取累积的研究上下文")
         return self.context
 
     def get_costs(self) -> float:
@@ -987,6 +1017,7 @@ class GPTResearcher:
         Returns:
             Total cost in USD.
         """
+        logger.info("▶ GPTResearcher.get_costs — 获取累计API费用")
         return self.research_costs
 
     def get_step_costs(self) -> dict[str, float]:
@@ -995,6 +1026,7 @@ class GPTResearcher:
         Returns:
             Dictionary mapping step names to their costs in USD.
         """
+        logger.info("▶ GPTResearcher.get_step_costs — 获取各研究步骤的API费用明细")
         return dict(self.step_costs)
 
     def set_verbose(self, verbose: bool) -> None:
@@ -1003,6 +1035,7 @@ class GPTResearcher:
         Args:
             verbose: Whether to enable verbose output.
         """
+        logger.info("▶ GPTResearcher.set_verbose — 设置详细输出模式 | 入参: verbose=%s", verbose)
         self.verbose = verbose
 
     def add_costs(self, cost: float) -> None:
@@ -1016,6 +1049,7 @@ class GPTResearcher:
         Raises:
             ValueError: If cost is not a number.
         """
+        logger.info("▶ GPTResearcher.add_costs — 累加API费用 | 入参: cost=%.6f", cost)
         if not isinstance(cost, (float, int)):
             raise ValueError("Cost must be an integer or float")
         self.research_costs += cost
@@ -1327,3 +1361,4 @@ async def _filter_images_by_topic_relevance(
                 return hint
 
     return "General"
+

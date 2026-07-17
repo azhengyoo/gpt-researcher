@@ -3,22 +3,27 @@ import logging
 import sys
 from pathlib import Path
 
+from gpt_researcher.utils.logging_config import RelativePathFormatter
+
 # Create logs directory if it doesn't exist
 logs_dir = Path("logs")
 logs_dir.mkdir(exist_ok=True)
 
 # Configure logging with UTF-8 encoding for Windows compatibility
+_STREAM_FMT = '%(asctime)s - %(relative_path)s:%(lineno)d - %(levelname)s - %(message)s'
+_FILE_FMT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+stream_handler = logging.StreamHandler(
+    open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1, closefd=False)
+)
+stream_handler.setFormatter(RelativePathFormatter(_STREAM_FMT))
+
+file_handler = logging.FileHandler('logs/app.log', encoding='utf-8')
+file_handler.setFormatter(logging.Formatter(_FILE_FMT))
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        # File handler for general application logs
-        logging.FileHandler('logs/app.log', encoding='utf-8'),
-        # Stream handler for console output (UTF-8)
-        logging.StreamHandler(
-            open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1, closefd=False)
-        ),
-    ]
+    handlers=[file_handler, stream_handler],
 )
 
 # Suppress verbose fontTools logging

@@ -1,13 +1,18 @@
-from dotenv import load_dotenv
-import sys
+import asyncio
+import json
+import logging
 import os
+import sys
 import uuid
+
+from dotenv import load_dotenv
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from multi_agents.agents import ChiefEditorAgent
-import asyncio
-import json
 from gpt_researcher.utils.enum import Tone
+
+logger = logging.getLogger(__name__)
 
 # Run with LangSmith if API key is set
 if os.environ.get("LANGCHAIN_API_KEY"):
@@ -16,6 +21,7 @@ load_dotenv()
 
 def open_task():
     # Get the directory of the current script
+    logger.info("▶ open_task — 打开并加载任务配置")
     current_dir = os.path.dirname(os.path.abspath(__file__))
     # Construct the absolute path to task.json
     task_json_path = os.path.join(current_dir, 'task.json')
@@ -38,6 +44,7 @@ def open_task():
     return task
 
 async def run_research_task(query, websocket=None, stream_output=None, tone=Tone.Objective, headers=None):
+    logger.info("▶ run_research_task — 执行研究任务 | 入参: query=%s", query)
     task = open_task()
     task["query"] = query
 
@@ -50,6 +57,7 @@ async def run_research_task(query, websocket=None, stream_output=None, tone=Tone
     return research_report
 
 async def main():
+    logger.info("▶ main — 启动多智能体研究主流程")
     task = open_task()
 
     chief_editor = ChiefEditorAgent(task)

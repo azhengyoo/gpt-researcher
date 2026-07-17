@@ -1,10 +1,15 @@
+import logging
+
 from gpt_researcher import GPTResearcher
 from colorama import Fore, Style
 from .utils.views import print_agent_output
 
+logger = logging.getLogger(__name__)
+
 
 class ResearchAgent:
     def __init__(self, websocket=None, stream_output=None, tone=None, headers=None):
+        logger.info("▶ ResearchAgent.__init__ — 初始化研究agent")
         self.websocket = websocket
         self.stream_output = stream_output
         self.headers = headers or {}
@@ -12,6 +17,7 @@ class ResearchAgent:
 
     async def research(self, query: str, research_report: str = "research_report",
                        parent_query: str = "", verbose=True, source="web", tone=None, headers=None):
+        logger.info("▶ ResearchAgent.research — 执行研究并生成报告 | 入参: query=%s, report_type=%s", query, research_report)
         # Initialize the researcher
         researcher = GPTResearcher(query=query, report_type=research_report, parent_query=parent_query,
                                    verbose=verbose, report_source=source, tone=tone, websocket=self.websocket, headers=self.headers)
@@ -23,6 +29,7 @@ class ResearchAgent:
         return report
 
     async def run_subtopic_research(self, parent_query: str, subtopic: str, verbose: bool = True, source="web", headers=None):
+        logger.info("▶ ResearchAgent.run_subtopic_research — 运行子主题研究 | 入参: subtopic=%s, parent_query=%s", subtopic, parent_query)
         try:
             report = await self.research(parent_query=parent_query, query=subtopic,
                                          research_report="subtopic_report", verbose=verbose, source=source, tone=self.tone, headers=None)
@@ -32,6 +39,7 @@ class ResearchAgent:
         return {subtopic: report}
 
     async def run_initial_research(self, research_state: dict):
+        logger.info("▶ ResearchAgent.run_initial_research — 运行初始研究")
         task = research_state.get("task")
         query = task.get("query")
         source = task.get("source", "web")
@@ -44,6 +52,7 @@ class ResearchAgent:
                                                                       source=source, tone=self.tone, headers=self.headers)}
 
     async def run_depth_research(self, draft_state: dict):
+        logger.info("▶ ResearchAgent.run_depth_research — 运行深度研究")
         task = draft_state.get("task")
         topic = draft_state.get("topic")
         parent_query = task.get("query")

@@ -11,6 +11,7 @@ from gpt_researcher.document.document import DocumentLoader
 from gpt_researcher import GPTResearcher
 from gpt_researcher.actions import stream_output
 from gpt_researcher.utils.confirmations import pending_confirmations
+
 from starlette.websockets import WebSocketDisconnect
 from backend.utils import write_md_to_pdf, write_md_to_word, write_text_to_md
 from pathlib import Path
@@ -58,6 +59,7 @@ class CustomLogsHandler:
 
     async def send_json(self, data: Dict[str, Any]) -> None:
         """Store log data and send to websocket"""
+        logger.info("▶ CustomLogsHandler.send_json — 存储日志数据并发送到websocket | 入参: data_type=%s", data.get('type'))
         # Send to websocket for real-time display
         if self.websocket:
             await self.websocket.send_json(data)
@@ -98,6 +100,7 @@ class Researcher:
 
     async def research(self) -> dict:
         """Conduct research and return paths to generated files"""
+        logger.info("▶ Researcher.research — 进行研究并返回生成文件的路径 | 入参: query=%s", self.query)
         await self.researcher.conduct_research()
         report = await self.researcher.write_report()
         
@@ -116,6 +119,7 @@ class Researcher:
         }
 
 def sanitize_filename(filename: str) -> str:
+    logger.info("▶ sanitize_filename — 清理文件名，移除不安全字符 | 入参: filename=%s", filename)
     # Split into components
     prefix, timestamp, *task_parts = filename.split('_')
     task = '_'.join(task_parts)
@@ -127,6 +131,7 @@ def sanitize_filename(filename: str) -> str:
 
 
 async def handle_start_command(websocket, data: str, manager):
+    logger.info("▶ handle_start_command — 处理客户端的 start 命令，启动研究 | 入参: data=%s", data)
     json_data = json.loads(data[6:])
     (
         task,
@@ -204,6 +209,7 @@ async def handle_start_command(websocket, data: str, manager):
 
 
 async def handle_human_feedback(data: str):
+    logger.info("▶ handle_human_feedback — 处理人类反馈 | 入参: data=%s", data)
     feedback_data = json.loads(data[14:])  # Remove "human_feedback" prefix
     print(f"Received human feedback: {feedback_data}")
     # TODO: Add logic to forward the feedback to the appropriate agent or update the research state
@@ -211,6 +217,7 @@ async def handle_human_feedback(data: str):
 
 async def handle_chat_command(websocket, data: str):
     """Handle chat command from WebSocket."""
+    logger.info("▶ handle_chat_command — 处理聊天命令 | 入参: data=%s", data)
     try:
         # Parse chat data - format is "chat {json_data}"
         json_str = data[5:].strip()  # Remove "chat " prefix
@@ -279,6 +286,7 @@ async def handle_chat_command(websocket, data: str):
         })
 
 async def generate_report_files(report: str, filename: str) -> Dict[str, str]:
+    logger.info("▶ generate_report_files — 生成最终报告文件（PDF/Word/Markdown）| 入参: filename=%s", filename)
     pdf_path = await write_md_to_pdf(report, filename)
     docx_path = await write_md_to_word(report, filename)
     md_path = await write_text_to_md(report, filename)
@@ -286,6 +294,7 @@ async def generate_report_files(report: str, filename: str) -> Dict[str, str]:
 
 
 async def send_file_paths(websocket, file_paths: Dict[str, str]):
+    logger.info("▶ send_file_paths — 发送文件路径给前端 | 入参: file_paths=%s", file_paths)
     await websocket.send_json({"type": "path", "output": file_paths})
 
 
@@ -294,6 +303,8 @@ def get_config_dict(
     google_api_key: str, google_cx_key: str, bing_api_key: str,
     searchapi_api_key: str, serpapi_api_key: str, serper_api_key: str, searx_url: str
 ) -> Dict[str, str]:
+    logger.info("▶ get_config_dict — 获取API配置字典 | 入参: openai_api_key=%s, tavily_api_key=%s", 
+                 "***" if openai_api_key else "", "***" if tavily_api_key else "")
     return {
         "LANGCHAIN_API_KEY": langchain_api_key or os.getenv("LANGCHAIN_API_KEY", ""),
         "OPENAI_API_KEY": openai_api_key or os.getenv("OPENAI_API_KEY", ""),
@@ -313,6 +324,7 @@ def get_config_dict(
 
 
 async def handle_file_upload(file, DOC_PATH: str) -> Dict[str, str]:
+    logger.info("▶ handle_file_upload — 处理文件上传 | 入参: filename=%s", file.filename)
     file_path = os.path.join(DOC_PATH, os.path.basename(file.filename))
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -325,6 +337,7 @@ async def handle_file_upload(file, DOC_PATH: str) -> Dict[str, str]:
 
 
 async def handle_file_deletion(filename: str, DOC_PATH: str) -> JSONResponse:
+    logger.info("▶ handle_file_deletion — 处理文件删除 | 入参: filename=%s", filename)
     file_path = os.path.join(DOC_PATH, os.path.basename(filename))
     if os.path.exists(file_path):
         os.remove(file_path)
@@ -336,6 +349,7 @@ async def handle_file_deletion(filename: str, DOC_PATH: str) -> JSONResponse:
 
 
 async def execute_multi_agents(manager) -> Any:
+    logger.info("▶ execute_multi_agents — 执行多智能体研究任务")
     websocket = manager.active_connections[0] if manager.active_connections else None
     if websocket:
         report = await run_multi_agent_task("Is AI in a hype cycle?", websocket, stream_output)
@@ -345,6 +359,7 @@ async def execute_multi_agents(manager) -> Any:
 
 
 async def handle_websocket_communication(websocket, manager):
+    logger.info("▶ handle_websocket_communication — 处理WebSocket通信主循环")
     running_task: asyncio.Task | None = None
 
     def run_long_running_task(awaitable: Awaitable) -> asyncio.Task:
@@ -439,6 +454,7 @@ async def handle_websocket_communication(websocket, manager):
 def _clean_doc_path(path: str) -> str:
     """Strip invisible Unicode bidirectional control characters often
     introduced when copying a path from Windows File Explorer."""
+    logger.info("▶ _clean_doc_path — 清理路径中的不可见Unicode字符 | 入参: path=%s", path)
     if not path:
         return path
     # U+200E LEFT-TO-RIGHT MARK,  U+200F RIGHT-TO-LEFT MARK,
@@ -450,6 +466,7 @@ def _clean_doc_path(path: str) -> str:
 
 
 def extract_command_data(json_data: Dict) -> tuple:
+    logger.info("▶ extract_command_data — 从JSON数据中提取命令参数 | 入参: keys=%s", list(json_data.keys()))
     doc_path = _clean_doc_path(json_data.get("doc_path", ""))
     return (
         json_data.get("task"),
@@ -466,3 +483,6 @@ def extract_command_data(json_data: Dict) -> tuple:
         json_data.get("max_search_results"),
         doc_path,
     )
+
+
+

@@ -23,6 +23,7 @@ async def scrape_urls(
         tuple[list[dict[str, Any]], list[dict[str, Any]]]: tuple containing scraped content and images
 
     """
+    logger.info("▶ scrape_urls — 并发抓取多个URL | 入参: urls数量=%d", len(urls))
     scraped_data = []
     images = []
     seen_urls = set()  # Cross-page deduplication
@@ -66,6 +67,7 @@ async def filter_urls(urls: list[str], config: Config) -> list[str]:
     Returns:
         list[str]: Filtered list of URLs.
     """
+    logger.info("▶ filter_urls — 根据配置过滤URL | 入参: urls数量=%d", len(urls))
     filtered_urls = []
     for url in urls:
         # Add your filtering logic here
@@ -84,6 +86,7 @@ async def extract_main_content(html_content: str) -> str:
     Returns:
         str: Extracted main content.
     """
+    logger.info("▶ extract_main_content — 从HTML提取主要内容")
     # Implement content extraction logic here
     # This could involve using libraries like BeautifulSoup or custom parsing logic
     # For now, we'll just return the raw HTML as a placeholder
@@ -100,6 +103,7 @@ async def process_scraped_data(scraped_data: list[dict[str, Any]], config: Confi
     Returns:
         list[dict[str, Any]]: Processed scraped data.
     """
+    logger.info("▶ process_scraped_data — 处理抓取数据提取主要内容 | 入参: scraped_data数量=%d", len(scraped_data))
     processed_data = []
     for item in scraped_data:
         if item['status'] == 'success':

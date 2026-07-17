@@ -1,10 +1,13 @@
 import hashlib
+import logging
 import os
 import time
 from fastapi import WebSocket
 from typing import Any
 
 from gpt_researcher import GPTResearcher
+
+logger = logging.getLogger(__name__)
 
 
 class BasicReport:
@@ -25,6 +28,7 @@ class BasicReport:
         max_search_results=None,
         doc_path="",
     ):
+        logger.info("▶ BasicReport.__init__ — 初始化基本报告生成器 | 入参: query=%s, report_type=%s", query, report_type)
         self.query = query
         self.query_domains = query_domains
         self.report_type = report_type
@@ -74,11 +78,13 @@ class BasicReport:
 
     def _generate_research_id(self, query: str) -> str:
         """Generate a unique research ID from query and timestamp."""
+        logger.info("▶ BasicReport._generate_research_id — 生成唯一研究ID | 入参: query=%s", query)
         timestamp = str(int(time.time()))
         query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
         return f"research_{timestamp}_{query_hash}"
 
     async def run(self):
+        logger.info("▶ BasicReport.run — 执行完整的研究和报告生成流程")
         await self.gpt_researcher.conduct_research()
         report = await self.gpt_researcher.write_report()
         return report

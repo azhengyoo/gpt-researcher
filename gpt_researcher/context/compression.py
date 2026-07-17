@@ -15,6 +15,7 @@ Classes:
 """
 
 import asyncio
+import logging
 import os
 from typing import Optional
 
@@ -31,6 +32,8 @@ from ..prompts import PromptFamily
 from ..utils.costs import estimate_embedding_cost
 from ..vector_store import VectorStoreWrapper
 from .retriever import SearchAPIRetriever, SectionRetriever
+
+logger = logging.getLogger(__name__)
 
 
 class VectorstoreCompressor:
@@ -62,6 +65,7 @@ class VectorstoreCompressor:
             prompt_family: Prompt family for formatting output.
             **kwargs: Additional keyword arguments.
         """
+        logger.info("▶ VectorstoreCompressor.__init__ — 初始化向量存储压缩器")
         self.vector_store = vector_store
         self.max_results = max_results
         self.filter = filter
@@ -78,6 +82,7 @@ class VectorstoreCompressor:
         Returns:
             Formatted string of relevant document content.
         """
+        logger.info("▶ VectorstoreCompressor.async_get_context — 从向量存储异步获取上下文 | 入参: query=%s, max_results=%d", query, max_results)
         results = await self.vector_store.asimilarity_search(query=query, k=max_results, filter=self.filter)
         return self.prompt_family.pretty_print_docs(results)
 
@@ -115,6 +120,7 @@ class ContextCompressor:
             prompt_family: Prompt family for formatting output.
             **kwargs: Additional keyword arguments.
         """
+        logger.info("▶ ContextCompressor.__init__ — 初始化上下文压缩器")
         self.max_results = max_results
         self.documents = documents
         self.kwargs = kwargs
@@ -131,6 +137,7 @@ class ContextCompressor:
             A ContextualCompressionRetriever configured with text splitting
             and embedding-based filtering.
         """
+        logger.info("▶ ContextCompressor.__get_contextual_retriever — 构建上下文压缩检索器管道")
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         relevance_filter = EmbeddingsFilter(embeddings=self.embeddings,
                                             similarity_threshold=self.similarity_threshold)
@@ -159,6 +166,7 @@ class ContextCompressor:
         Returns:
             Formatted string of relevant document content.
         """
+        logger.info("▶ ContextCompressor.async_get_context — 异步获取压缩上下文 | 入参: query=%s, max_results=%d", query, max_results)
         # Optimization: Calculate total content size
         total_chars = sum(len(str(doc.get('raw_content', ''))) for doc in self.documents)
         chunk_threshold = int(os.environ.get("COMPRESSION_THRESHOLD", "8000"))
@@ -210,6 +218,7 @@ class WrittenContentCompressor:
             similarity_threshold: Minimum similarity score for inclusion.
             **kwargs: Additional keyword arguments.
         """
+        logger.info("▶ WrittenContentCompressor.__init__ — 初始化已写内容压缩器")
         self.documents = documents
         self.kwargs = kwargs
         self.embeddings = embeddings
@@ -221,6 +230,7 @@ class WrittenContentCompressor:
         Returns:
             A ContextualCompressionRetriever configured for section retrieval.
         """
+        logger.info("▶ WrittenContentCompressor.__get_contextual_retriever — 构建章节上下文压缩检索器")
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         relevance_filter = EmbeddingsFilter(embeddings=self.embeddings,
                                             similarity_threshold=self.similarity_threshold)
@@ -245,6 +255,7 @@ class WrittenContentCompressor:
         Returns:
             List of formatted document strings.
         """
+        logger.info("▶ WrittenContentCompressor.__pretty_docs_list — 格式化文档列表 | 入参: top_n=%d", top_n)
         return [f"Title: {d.metadata.get('section_title')}\nContent: {d.page_content}\n" for i, d in enumerate(docs) if i < top_n]
 
     async def async_get_context(self, query: str, max_results: int = 5, cost_callback=None) -> list[str]:
@@ -258,6 +269,7 @@ class WrittenContentCompressor:
         Returns:
             List of formatted section strings.
         """
+        logger.info("▶ WrittenContentCompressor.async_get_context — 异步获取已写内容章节 | 入参: query=%s, max_results=%d", query, max_results)
         compressed_docs = self.__get_contextual_retriever()
         if cost_callback:
             cost_callback(estimate_embedding_cost(model=OPENAI_EMBEDDING_MODEL, docs=self.documents))

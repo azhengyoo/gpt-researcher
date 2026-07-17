@@ -4,6 +4,36 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+
+class RelativePathFormatter(logging.Formatter):
+    """将绝对路径自动转为项目根目录下的相对路径的 Formatter。
+
+    用法：格式字符串中用 %(relative_path)s 替代 %(name)s 或 %(pathname)s。
+    """
+
+    _project_root: str | None = None
+
+    @classmethod
+    def _get_project_root(cls) -> str:
+        if cls._project_root is None:
+            current = Path.cwd()
+            for parent in [current, *current.parents]:
+                if (parent / ".git").exists() or (parent / "pyproject.toml").exists():
+                    cls._project_root = str(parent)
+                    break
+            if cls._project_root is None:
+                cls._project_root = str(current)
+        return cls._project_root
+
+    def format(self, record: logging.LogRecord) -> str:
+        root = self._get_project_root()
+        pathname = getattr(record, "pathname", "")
+        if pathname and pathname.startswith(root):
+            record.relative_path = pathname[len(root):].lstrip(os.sep)
+        else:
+            record.relative_path = pathname
+        return super().format(record)
+
 class JSONResearchHandler:
     def __init__(self, json_file):
         self.json_file = json_file
@@ -64,7 +94,7 @@ def setup_research_logging():
     
     # Add stream handler for console output
     console_handler = logging.StreamHandler()
-    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    console_handler.setFormatter(RelativePathFormatter('%(asctime)s - %(relative_path)s:%(lineno)d - %(levelname)s - %(message)s'))
     research_logger.addHandler(console_handler)
     
     # Prevent propagation to root logger to avoid duplicate logs

@@ -5,6 +5,7 @@ retrieval, compression, and similarity matching for research queries.
 """
 
 import asyncio
+import logging
 from typing import Dict, List, Optional, Set
 
 from ..actions.utils import stream_output
@@ -13,6 +14,8 @@ from ..context.compression import (
     VectorstoreCompressor,
     WrittenContentCompressor,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ContextManager:
@@ -32,6 +35,7 @@ class ContextManager:
         Args:
             researcher: The GPTResearcher instance that owns this manager.
         """
+        logger.info("▶ ContextManager.__init__ — 初始化上下文管理器 | 入参: researcher=%s", researcher)
         self.researcher = researcher
 
     async def get_similar_content_by_query(self, query: str, pages: list) -> str:
@@ -44,6 +48,7 @@ class ContextManager:
         Returns:
             Compressed context string of relevant content.
         """
+        logger.info("▶ ContextManager.get_similar_content_by_query — 根据查询获取相似内容 | 入参: query=%s", query)
         if self.researcher.verbose:
             await stream_output(
                 "logs",
@@ -73,6 +78,7 @@ class ContextManager:
         Returns:
             Compressed context string of relevant content from vectorstore.
         """
+        logger.info("▶ ContextManager.get_similar_content_by_query_with_vectorstore — 根据查询从向量存储获取相似内容 | 入参: query=%s", query)
         if self.researcher.verbose:
             await stream_output(
                 "logs",
@@ -80,6 +86,7 @@ class ContextManager:
                 f" Getting relevant content based on query: {query}...",
                 self.researcher.websocket,
                 )
+
         vectorstore_compressor = VectorstoreCompressor(
             self.researcher.vector_store, filter=filter, prompt_family=self.researcher.prompt_family,
             **self.researcher.kwargs
@@ -107,6 +114,7 @@ class ContextManager:
         Returns:
             List of relevant written content strings.
         """
+        logger.info("▶ ContextManager.get_similar_written_contents_by_draft_section_titles — 根据草稿章节标题获取相似已写内容 | 入参: current_subtopic=%s", current_subtopic)
         all_queries = [current_subtopic] + draft_section_titles
 
         async def process_query(query: str) -> Set[str]:
@@ -136,6 +144,7 @@ class ContextManager:
         Returns:
             List of similar written content strings.
         """
+        logger.info("▶ ContextManager.__get_similar_written_contents_by_query — 根据单个查询获取相似已写内容 | 入参: query=%s", query)
         if self.researcher.verbose:
             await stream_output(
                 "logs",

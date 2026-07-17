@@ -13,6 +13,7 @@ from backend.report_type import BasicReport, DetailedReport
 
 from gpt_researcher.utils.enum import ReportType, Tone
 from gpt_researcher.actions import stream_output  # Import stream_output
+
 from .multi_agent_runner import run_multi_agent_task
 from .server_utils import CustomLogsHandler
 
@@ -29,6 +30,7 @@ class WebSocketManager:
 
     async def start_sender(self, websocket: WebSocket):
         """Start the sender task."""
+        logger.info("▶ WebSocketManager.start_sender — 启动消息发送任务")
         queue = self.message_queues.get(websocket)
         if not queue:
             return
@@ -49,6 +51,7 @@ class WebSocketManager:
 
     async def connect(self, websocket: WebSocket):
         """Connect a websocket."""
+        logger.info("▶ WebSocketManager.connect — 建立WebSocket连接并开始发送任务")
         try:
             await websocket.accept()
             self.active_connections.append(websocket)
@@ -62,6 +65,7 @@ class WebSocketManager:
 
     async def disconnect(self, websocket: WebSocket):
         """Disconnect a websocket."""
+        logger.info("▶ WebSocketManager.disconnect — 断开WebSocket连接")
         try:
             if websocket in self.active_connections:
                 self.active_connections.remove(websocket)
@@ -97,6 +101,7 @@ class WebSocketManager:
 
     async def start_streaming(self, task, report_type, report_source, source_urls, document_urls, tone, websocket, headers=None, query_domains=[], mcp_enabled=False, mcp_strategy="fast", mcp_configs=[], max_search_results=None, doc_path=""):
         """Start streaming the output."""
+        logger.info("▶ WebSocketManager.start_streaming — 启动数据流式传输研究任务 | 入参: task=%s, report_type=%s", task, report_type)
         tone = Tone[tone]
         # add customized JSON config file path here
         config_path = os.environ.get("CONFIG_PATH", "default")
@@ -110,8 +115,10 @@ class WebSocketManager:
         )
         return report
 
+
 async def run_agent(task, report_type, report_source, source_urls, document_urls, tone: Tone, websocket, stream_output=stream_output, headers=None, query_domains=[], config_path="", return_researcher=False, mcp_enabled=False, mcp_strategy="fast", mcp_configs=[], max_search_results=None, doc_path=""):
     """Run the agent."""    
+    logger.info("▶ run_agent — 运行研究代理 | 入参: task=%s, report_type=%s, report_source=%s", task, report_type, report_source)
     # Create logs handler for this research task
     logs_handler = CustomLogsHandler(websocket, task)
 
@@ -184,6 +191,9 @@ async def run_agent(task, report_type, report_source, source_urls, document_urls
         report = await researcher.run()
 
     if report_type != "multi_agents" and return_researcher:
-        return report, researcher.gpt_researcher
+        return report
     else:
         return report
+
+
+
